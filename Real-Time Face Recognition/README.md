@@ -1,6 +1,6 @@
 # Real-Time Face Recognition System
 
-A comprehensive Java application for real-time face recognition using OpenCV and JavaCV. This system provides both GUI and command-line interfaces for detecting and recognizing faces from webcam input.
+A comprehensive Java application for real-time face recognition using OpenCV and JavaCV. This system provides both GUI and command-line interfaces for detecting and recognizing faces from webcam input with professional-grade architecture and comprehensive testing.
 
 ## Features
 
@@ -9,8 +9,10 @@ A comprehensive Java application for real-time face recognition using OpenCV and
 - **Person Registration**: Easy registration of new persons with face data storage
 - **Database Management**: SQLite database for storing face embeddings and person information
 - **Dual Interface**: Both Swing GUI and command-line interfaces available
-- **Configurable Threshold**: Adjustable recognition threshold for different accuracy requirements
-- **Modular Architecture**: Clean OOP design with separated concerns
+- **Configurable System**: Externalized configuration with application.properties
+- **Professional Architecture**: Clean OOP design with proper exception handling
+- **Comprehensive Testing**: JUnit 5 tests with nested test structure
+- **Utility Functions**: Common helper methods and validation utilities
 
 ## System Requirements
 
@@ -28,18 +30,45 @@ src/
 │   ├── java/
 │   │   └── com/
 │   │       └── facerecognition/
-│   │           ├── Main.java                    # Main entry point
+│   │           ├── Main.java                     # Main entry point
+│   │           ├── config/
+│   │           │   └── ConfigurationManager.java # Configuration management
 │   │           ├── core/
-│   │           │   ├── FaceDetector.java        # Haar cascade face detection
-│   │           │   └── FaceRecognizer.java      # Face recognition & embeddings
+│   │           │   ├── FaceDetector.java         # Haar cascade face detection
+│   │           │   └── FaceRecognizer.java       # Face recognition & embeddings
 │   │           ├── database/
-│   │           │   └── DatabaseManager.java     # SQLite database operations
-│   │           └── gui/
-│   │               └── FaceRecognitionGUI.java  # Swing GUI interface
+│   │           │   └── DatabaseManager.java      # SQLite database operations
+│   │           ├── exception/                    # Custom exception classes
+│   │           │   ├── FaceRecognitionException.java
+│   │           │   ├── FaceDetectionException.java
+│   │           │   └── DatabaseException.java
+│   │           ├── gui/
+│   │           │   └── FaceRecognitionGUI.java   # Swing GUI interface
+│   │           └── util/
+│   │               └── FaceRecognitionUtils.java # Utility functions
 │   └── resources/
+│       ├── application.properties                # Configuration file
+│       ├── haarcascade_frontalface_alt.xml      # Face detection model
 │       └── logback.xml                          # Logging configuration
-pom.xml                                          # Maven dependencies
+├── test/
+│   └── java/
+│       └── com/
+│           └── facerecognition/
+│               └── FaceRecognitionTest.java      # Comprehensive test suite
+pom.xml                                          # Maven dependencies & build config
+.gitignore                                       # Git ignore rules
+run.sh                                          # Startup script
 ```
+
+## Configuration
+
+The application uses `application.properties` for configuration management. Key settings include:
+
+- **Camera Settings**: Resolution, frame rate
+- **Recognition Settings**: Threshold, distance parameters
+- **Database Settings**: File location, initialization
+- **Face Detection Settings**: Scale factor, neighbor detection
+- **GUI Settings**: Window dimensions, title
 
 ## Installation & Setup
 
