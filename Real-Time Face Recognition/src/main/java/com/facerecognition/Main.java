@@ -31,8 +31,8 @@ import javax.swing.*;
 public class Main {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
     
-    // Configuration constants
-    private static final double RECOGNITION_THRESHOLD = 0.6;
+    // Configuration constants - improved for better recognition
+    private static final double RECOGNITION_THRESHOLD = 0.45;  // Lower threshold for better sensitivity
     private static final int CAMERA_WIDTH = 640;
     private static final int CAMERA_HEIGHT = 480;
     private static final int FRAME_RATE = 30;
