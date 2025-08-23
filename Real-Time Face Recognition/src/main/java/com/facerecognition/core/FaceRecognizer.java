@@ -29,16 +29,18 @@ import java.util.Map;
 public class FaceRecognizer {
     private static final Logger logger = LoggerFactory.getLogger(FaceRecognizer.class);
     
-    // Recognition parameters
+    // Recognition parameters - improved for better accuracy
     private final double recognitionThreshold;
     private double lastRecognitionConfidence = 0.0;
-    private static final int FACE_SIZE = 100;  // Standardized face size for processing
+    private static final int FACE_SIZE = 128;  // Larger face size for better features
     private static final int HISTOGRAM_BINS = 256;
-    private static final int FEATURE_VECTOR_SIZE = 512; // Size of face embedding
+    private static final int FEATURE_VECTOR_SIZE = 1024; // Larger feature vector for better representation
     
-    // Feature extraction parameters
-    private static final double GAUSSIAN_BLUR_SIGMA = 1.0;
-    private static final Size BLUR_KERNEL_SIZE = new Size(5, 5);
+    // Enhanced feature extraction parameters
+    private static final double GAUSSIAN_BLUR_SIGMA = 0.8;
+    private static final Size BLUR_KERNEL_SIZE = new Size(3, 3);
+    private static final int LBP_RADIUS = 2;
+    private static final int LBP_NEIGHBORS = 16;
     
     /**
      * Constructor with configurable recognition threshold
@@ -104,7 +106,7 @@ public class FaceRecognizer {
     }
     
     /**
-     * Preprocess face region for feature extraction
+     * Preprocess face region for feature extraction with enhanced normalization
      * @param faceRegion Input face region
      * @return Preprocessed face matrix
      */
@@ -126,9 +128,30 @@ public class FaceRecognizer {
         Mat blurred = new Mat();
         opencv_imgproc.GaussianBlur(resized, blurred, BLUR_KERNEL_SIZE, GAUSSIAN_BLUR_SIGMA);
         
-        // Histogram equalization for lighting normalization
-        Mat equalized = new Mat();
-        opencv_imgproc.equalizeHist(blurred, equalized);
+        // Enhanced lighting normalization
+        Mat normalized = new Mat();
+        
+        // Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        try {
+            // Create CLAHE object - better than simple histogram equalization
+            var clahe = opencv_imgproc.createCLAHE();
+            clahe.setClipLimit(2.0);
+            clahe.setTilesGridSize(new Size(8, 8));
+            clahe.apply(blurred, normalized);
+            clahe.close();
+        } catch (Exception e) {
+            // Fallback to standard histogram equalization
+            opencv_imgproc.equalizeHist(blurred, normalized);
+        }
+        
+        // Additional noise reduction with bilateral filter for edge preservation
+        Mat denoised = new Mat();
+        try {
+            opencv_imgproc.bilateralFilter(normalized, denoised, 9, 75, 75);
+        } catch (Exception e) {
+            // Fallback to original if bilateral filter fails
+            denoised = normalized.clone();
+        }
         
         // Cleanup intermediate matrices
         if (!processed.equals(faceRegion)) {
@@ -136,8 +159,9 @@ public class FaceRecognizer {
         }
         resized.release();
         blurred.release();
+        normalized.release();
         
-        return equalized;
+        return denoised;
     }
     
     /**
@@ -352,7 +376,7 @@ public class FaceRecognizer {
                 String personName = (String) record.get("person_name");
                 double[] storedEmbedding = (double[]) record.get("embedding");
                 
-                double similarity = calculateCosineSimilarity(inputEmbedding, storedEmbedding);
+                double similarity = calculateHybridSimilarity(inputEmbedding, storedEmbedding);
                 
                 logger.debug("Similarity with {}: {}", personName, similarity);
                 
@@ -376,6 +400,106 @@ public class FaceRecognizer {
             logger.error("Error during face recognition: ", e);
             return "Unknown";
         }
+    }
+    
+    /**
+     * Calculate hybrid similarity combining multiple distance metrics for better accuracy
+     * @param embedding1 First embedding
+     * @param embedding2 Second embedding
+     * @return Hybrid similarity value (0.0 to 1.0)
+     */
+    private double calculateHybridSimilarity(double[] embedding1, double[] embedding2) {
+        if (embedding1.length != embedding2.length) {
+            logger.warn("Embedding vectors have different lengths: {} vs {}", 
+                       embedding1.length, embedding2.length);
+            return 0.0;
+        }
+        
+        // 1. Cosine similarity (good for direction)
+        double cosineSim = calculateCosineSimilarity(embedding1, embedding2);
+        
+        // 2. Euclidean distance similarity (good for magnitude)
+        double euclideanSim = calculateEuclideanSimilarity(embedding1, embedding2);
+        
+        // 3. Pearson correlation (good for patterns)
+        double correlationSim = calculatePearsonCorrelation(embedding1, embedding2);
+        
+        // Weighted combination for optimal results
+        double hybridSimilarity = (0.5 * cosineSim) + (0.3 * euclideanSim) + (0.2 * correlationSim);
+        
+        // Apply adaptive threshold boosting for low similarities
+        if (hybridSimilarity > 0.3 && hybridSimilarity < 0.7) {
+            hybridSimilarity = hybridSimilarity * 1.1; // Slight boost for borderline cases
+        }
+        
+        return Math.max(0.0, Math.min(1.0, hybridSimilarity));
+    }
+    
+    /**
+     * Calculate Euclidean distance similarity
+     * @param embedding1 First embedding
+     * @param embedding2 Second embedding
+     * @return Euclidean similarity value (0.0 to 1.0)
+     */
+    private double calculateEuclideanSimilarity(double[] embedding1, double[] embedding2) {
+        double sumSquaredDiff = 0.0;
+        
+        for (int i = 0; i < embedding1.length; i++) {
+            double diff = embedding1[i] - embedding2[i];
+            sumSquaredDiff += diff * diff;
+        }
+        
+        double euclideanDistance = Math.sqrt(sumSquaredDiff);
+        
+        // Convert distance to similarity (normalized)
+        double maxPossibleDistance = Math.sqrt(2.0 * embedding1.length); // Assuming normalized features
+        double similarity = 1.0 - (euclideanDistance / maxPossibleDistance);
+        
+        return Math.max(0.0, Math.min(1.0, similarity));
+    }
+    
+    /**
+     * Calculate Pearson correlation coefficient
+     * @param embedding1 First embedding
+     * @param embedding2 Second embedding
+     * @return Pearson correlation value converted to similarity (0.0 to 1.0)
+     */
+    private double calculatePearsonCorrelation(double[] embedding1, double[] embedding2) {
+        int n = embedding1.length;
+        
+        // Calculate means
+        double mean1 = 0.0, mean2 = 0.0;
+        for (int i = 0; i < n; i++) {
+            mean1 += embedding1[i];
+            mean2 += embedding2[i];
+        }
+        mean1 /= n;
+        mean2 /= n;
+        
+        // Calculate correlation components
+        double numerator = 0.0;
+        double sumSq1 = 0.0;
+        double sumSq2 = 0.0;
+        
+        for (int i = 0; i < n; i++) {
+            double diff1 = embedding1[i] - mean1;
+            double diff2 = embedding2[i] - mean2;
+            
+            numerator += diff1 * diff2;
+            sumSq1 += diff1 * diff1;
+            sumSq2 += diff2 * diff2;
+        }
+        
+        double denominator = Math.sqrt(sumSq1 * sumSq2);
+        
+        if (denominator < 1e-10) {
+            return 0.0;
+        }
+        
+        double correlation = numerator / denominator;
+        
+        // Convert correlation (-1 to 1) to similarity (0 to 1)
+        return (correlation + 1.0) / 2.0;
     }
     
     /**
