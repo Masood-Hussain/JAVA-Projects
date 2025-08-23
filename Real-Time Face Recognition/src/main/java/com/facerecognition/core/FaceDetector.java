@@ -3,6 +3,7 @@ package com.facerecognition.core;
 import org.bytedeco.opencv.opencv_core.*;
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
 import org.bytedeco.opencv.global.opencv_imgproc;
+import org.bytedeco.opencv.global.opencv_core;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,11 +29,11 @@ import java.nio.file.StandardCopyOption;
 public class FaceDetector {
     private static final Logger logger = LoggerFactory.getLogger(FaceDetector.class);
     
-    // Detection parameters - tuned for optimal performance
-    private static final double SCALE_FACTOR = 1.1;
-    private static final int MIN_NEIGHBORS = 5;
-    private static final Size MIN_SIZE = new Size(30, 30);
-    private static final Size MAX_SIZE = new Size(300, 300);
+    // Detection parameters - improved for better accuracy
+    private static final double SCALE_FACTOR = 1.05;  // Smaller scale factor for better detection
+    private static final int MIN_NEIGHBORS = 3;       // Reduced for more sensitive detection
+    private static final Size MIN_SIZE = new Size(20, 20);  // Smaller minimum size
+    private static final Size MAX_SIZE = new Size(500, 500); // Larger maximum size
     private static final int FLAGS = 0;
     
     // Haar cascade classifier for face detection
@@ -149,11 +150,10 @@ public class FaceDetector {
                 grayImage = image.clone();
             }
             
-            // Enhance image for better detection
-            Mat enhancedImage = new Mat();
-            opencv_imgproc.equalizeHist(grayImage, enhancedImage);
+            // Enhanced multi-stage preprocessing for better detection
+            Mat enhancedImage = enhanceImageForDetection(grayImage);
             
-            // Detect faces using cascade classifier
+            // Primary detection with standard parameters
             RectVector faces = new RectVector();
             faceCascade.detectMultiScale(
                 enhancedImage,      // Input image
@@ -164,6 +164,24 @@ public class FaceDetector {
                 MIN_SIZE,           // Minimum face size
                 MAX_SIZE            // Maximum face size
             );
+            
+            // If no faces detected, try with relaxed parameters
+            if (faces.size() == 0) {
+                RectVector relaxedFaces = new RectVector();
+                faceCascade.detectMultiScale(
+                    enhancedImage,
+                    relaxedFaces,
+                    1.03,              // Smaller scale factor for more thorough search
+                    2,                 // Fewer neighbors required
+                    FLAGS,
+                    new Size(15, 15),  // Smaller minimum size
+                    MAX_SIZE
+                );
+                
+                if (relaxedFaces.size() > 0) {
+                    faces = relaxedFaces;
+                }
+            }
             
             logger.debug("Detected {} faces in the image", faces.size());
             
@@ -209,6 +227,60 @@ public class FaceDetector {
         
         logger.debug("Largest face found with area: {}", maxArea);
         return largestFace;
+    }
+    
+    /**
+     * Enhanced image preprocessing for better face detection
+     * @param grayImage Input grayscale image
+     * @return Enhanced image optimized for face detection
+     */
+    private Mat enhanceImageForDetection(Mat grayImage) {
+        Mat enhanced = new Mat();
+        
+        try {
+            // Stage 1: Noise reduction with slight blur
+            Mat denoised = new Mat();
+            opencv_imgproc.GaussianBlur(grayImage, denoised, new Size(3, 3), 0.5);
+            
+            // Stage 2: CLAHE for better contrast (if available)
+            Mat claheResult = new Mat();
+            try {
+                var clahe = opencv_imgproc.createCLAHE();
+                clahe.setClipLimit(3.0);
+                clahe.setTilesGridSize(new Size(8, 8));
+                clahe.apply(denoised, claheResult);
+                clahe.close();
+            } catch (Exception e) {
+                // Fallback to standard histogram equalization
+                opencv_imgproc.equalizeHist(denoised, claheResult);
+            }
+            
+            // Stage 3: Simple sharpening alternative without custom kernel
+            Mat sharpened = new Mat();
+            try {
+                // Use Laplacian for edge enhancement instead of custom kernel
+                Mat laplacian = new Mat();
+                opencv_imgproc.Laplacian(claheResult, laplacian, opencv_core.CV_8U);
+                
+                // Add the edge information back to the original
+                opencv_core.addWeighted(claheResult, 1.0, laplacian, 0.3, 0, sharpened);
+                laplacian.release();
+            } catch (Exception e) {
+                // If sharpening fails, use the CLAHE result
+                sharpened = claheResult.clone();
+            }
+            
+            // Cleanup
+            denoised.release();
+            claheResult.release();
+            
+            return sharpened;
+            
+        } catch (Exception e) {
+            logger.warn("Error in image enhancement, using histogram equalization fallback: ", e);
+            opencv_imgproc.equalizeHist(grayImage, enhanced);
+            return enhanced;
+        }
     }
     
     /**
