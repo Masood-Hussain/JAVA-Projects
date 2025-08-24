@@ -365,15 +365,23 @@ public class DatabaseManager {
             return false;
         }
         
-        String sql = "DELETE FROM persons WHERE name = ?";
+        // First delete face embeddings for this person
+        String deleteEmbeddingsSQL = "DELETE FROM face_embeddings WHERE person_id = (SELECT id FROM persons WHERE name = ?)";
+        String deletePersonSQL = "DELETE FROM persons WHERE name = ?";
         
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, personName.trim());
+        try (PreparedStatement deleteEmbeddings = connection.prepareStatement(deleteEmbeddingsSQL);
+             PreparedStatement deletePerson = connection.prepareStatement(deletePersonSQL)) {
             
-            int result = pstmt.executeUpdate();
+            // Delete face embeddings first
+            deleteEmbeddings.setString(1, personName.trim());
+            int embeddingsDeleted = deleteEmbeddings.executeUpdate();
             
-            if (result > 0) {
-                logger.info("Deleted person and their embeddings: {}", personName);
+            // Then delete the person
+            deletePerson.setString(1, personName.trim());
+            int personDeleted = deletePerson.executeUpdate();
+            
+            if (personDeleted > 0) {
+                logger.info("Deleted person '{}' and {} face embeddings", personName, embeddingsDeleted);
                 return true;
             } else {
                 logger.warn("Person not found for deletion: {}", personName);
@@ -423,6 +431,50 @@ public class DatabaseManager {
         }
         
         return stats;
+    }
+    
+    /**
+     * Clear all persons and embeddings (useful for incompatible data cleanup)
+     * @return true if successful, false otherwise
+     */
+    public boolean clearAllData() {
+        if (!isInitialized) {
+            logger.error("Database not initialized");
+            return false;
+        }
+        
+        try {
+            // Delete all face embeddings first
+            String deleteEmbeddingsSQL = "DELETE FROM face_embeddings";
+            try (PreparedStatement stmt = connection.prepareStatement(deleteEmbeddingsSQL)) {
+                int embeddingsDeleted = stmt.executeUpdate();
+                logger.info("Deleted {} face embeddings", embeddingsDeleted);
+            }
+            
+            // Delete all persons
+            String deletePersonsSQL = "DELETE FROM persons";
+            try (PreparedStatement stmt = connection.prepareStatement(deletePersonsSQL)) {
+                int personsDeleted = stmt.executeUpdate();
+                logger.info("Deleted {} persons", personsDeleted);
+            }
+            
+            // Reset auto-increment counters
+            String resetPersonsSQL = "DELETE FROM sqlite_sequence WHERE name='persons'";
+            String resetEmbeddingsSQL = "DELETE FROM sqlite_sequence WHERE name='face_embeddings'";
+            
+            try (PreparedStatement stmt1 = connection.prepareStatement(resetPersonsSQL);
+                 PreparedStatement stmt2 = connection.prepareStatement(resetEmbeddingsSQL)) {
+                stmt1.executeUpdate();
+                stmt2.executeUpdate();
+                logger.info("Reset database sequences");
+            }
+            
+            return true;
+            
+        } catch (SQLException e) {
+            logger.error("Error clearing database data", e);
+            return false;
+        }
     }
     
     /**
