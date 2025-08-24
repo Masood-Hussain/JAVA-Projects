@@ -186,6 +186,12 @@ public class FaceRecognitionGUI extends JFrame {
         deletePersonButton.addActionListener(e -> deletePerson());
         buttonPanel.add(deletePersonButton);
         
+        JButton clearAllButton = new JButton("Clear All Data");
+        clearAllButton.addActionListener(e -> clearAllData());
+        clearAllButton.setBackground(new Color(255, 100, 100));
+        clearAllButton.setForeground(Color.WHITE);
+        buttonPanel.add(clearAllButton);
+        
         leftPanel.add(buttonPanel, BorderLayout.SOUTH);
         
         // Right panel - Status and information
@@ -452,6 +458,37 @@ public class FaceRecognitionGUI extends JFrame {
                 JOptionPane.showMessageDialog(this,
                     "Failed to delete person: " + selectedPerson,
                     "Deletion Failed", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+    
+    /**
+     * Clear all data from the database
+     */
+    private void clearAllData() {
+        int result = JOptionPane.showConfirmDialog(this,
+            "Are you sure you want to delete ALL persons and face data?\n" +
+            "This action cannot be undone and will clear the entire database.\n\n" +
+            "This is useful if you have incompatible face embeddings from previous versions.",
+            "Confirm Clear All Data", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        
+        if (result == JOptionPane.YES_OPTION) {
+            boolean success = mainApp.getDatabaseManager().clearAllData();
+            
+            if (success) {
+                appendStatus("Cleared all database data successfully");
+                updatePersonsList();
+                updateStats();
+                
+                JOptionPane.showMessageDialog(this,
+                    "All data cleared successfully.\n" +
+                    "You can now register persons with the new face recognition system.",
+                    "Clear Successful", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                appendStatus("Failed to clear database data");
+                JOptionPane.showMessageDialog(this,
+                    "Failed to clear database data.",
+                    "Clear Failed", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
