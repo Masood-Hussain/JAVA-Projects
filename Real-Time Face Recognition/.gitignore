@@ -4,6 +4,7 @@
 # Log files
 *.log
 logs/
+face-recognition.log
 
 # BlueJ files
 *.ctxt
