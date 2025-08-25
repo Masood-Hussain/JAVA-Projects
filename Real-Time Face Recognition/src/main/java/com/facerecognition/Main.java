@@ -1,5 +1,6 @@
 package com.facerecognition;
 
+import com.facerecognition.config.ConfigurationManager;
 import com.facerecognition.core.FaceDetector;
 import com.facerecognition.core.FaceRecognizer;
 import com.facerecognition.database.DatabaseManager;
@@ -14,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.security.SecureRandom;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Main entry point for the Real-Time Face Recognition System
@@ -31,11 +34,14 @@ import javax.swing.*;
 public class Main {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
     
-    // Configuration constants - improved for better recognition
-    private static final double RECOGNITION_THRESHOLD = 0.45;  // Lower threshold for better sensitivity
-    private static final int CAMERA_WIDTH = 640;
-    private static final int CAMERA_HEIGHT = 480;
-    private static final int FRAME_RATE = 30;
+    // Configuration manager
+    private final ConfigurationManager config = ConfigurationManager.getInstance();
+    
+    // Configuration constants - loaded from configuration
+    private final double recognitionThreshold;
+    private final int cameraWidth;
+    private final int cameraHeight;
+    private final int frameRate;
     
     // Core components
     private FaceDetector faceDetector;
@@ -45,6 +51,38 @@ public class Main {
     private CanvasFrame canvas;
     private FaceRecognitionGUI gui;
     private boolean isRunning = false;
+    
+    // Security components
+    private final SecureRandom secureRandom = new SecureRandom();
+    private String sessionId;
+    private long sessionStartTime;
+    private int failedAttempts = 0;
+    
+    /**
+     * Constructor - initialize with configuration
+     */
+    public Main() {
+        // Load configuration values
+        this.recognitionThreshold = config.getDouble(ConfigurationManager.RECOGNITION_THRESHOLD);
+        this.cameraWidth = config.getInt(ConfigurationManager.CAMERA_WIDTH);
+        this.cameraHeight = config.getInt(ConfigurationManager.CAMERA_HEIGHT);
+        this.frameRate = config.getInt(ConfigurationManager.CAMERA_FRAME_RATE);
+        
+        // Generate session ID for security tracking
+        this.sessionId = generateSessionId();
+        this.sessionStartTime = System.currentTimeMillis();
+        
+        logger.info("Main application initialized with session ID: {}", sessionId);
+    }
+    
+    /**
+     * Generate secure session ID
+     */
+    private String generateSessionId() {
+        byte[] sessionBytes = new byte[16];
+        secureRandom.nextBytes(sessionBytes);
+        return java.util.Base64.getEncoder().encodeToString(sessionBytes);
+    }
     
     /**
      * Main method - entry point of the application
@@ -83,25 +121,73 @@ public class Main {
      * Initialize the face recognition system components
      */
     private void initialize() throws Exception {
-        logger.info("Initializing face recognition components...");
+        logger.info("Initializing face recognition components with session {}", sessionId);
+        
+        // Security check
+        if (config.isSecureMode()) {
+            logger.info("Running in secure mode");
+            validateSecurityRequirements();
+        }
         
         // Initialize database
         databaseManager = new DatabaseManager();
         databaseManager.initialize();
         
-        // Initialize face detector with Haar cascade
+        // Initialize face detector with configuration
         faceDetector = new FaceDetector();
         
-        // Initialize face recognizer
-        faceRecognizer = new FaceRecognizer(RECOGNITION_THRESHOLD);
+        // Initialize face recognizer with configured threshold
+        faceRecognizer = new FaceRecognizer(recognitionThreshold);
         
-        // Initialize camera
-        grabber = new OpenCVFrameGrabber(0); // Default camera
-        grabber.setImageWidth(CAMERA_WIDTH);
-        grabber.setImageHeight(CAMERA_HEIGHT);
-        grabber.setFrameRate(FRAME_RATE);
+        // Initialize camera with enhanced configuration
+        try {
+            logger.info("Initializing camera (device: 0, resolution: {}x{}, fps: {})", cameraWidth, cameraHeight, frameRate);
+            
+            grabber = new OpenCVFrameGrabber(0); // Default camera
+            grabber.setImageWidth(cameraWidth);
+            grabber.setImageHeight(cameraHeight);
+            grabber.setFrameRate(frameRate);
+            
+            // Additional camera optimizations
+            grabber.setFormat("video4linux2"); // Linux optimization
+            
+            logger.info("Camera initialization configured successfully");
+        } catch (Exception e) {
+            logger.error("Error configuring camera: ", e);
+            // Try fallback configuration
+            try {
+                grabber = new OpenCVFrameGrabber(0);
+                grabber.setImageWidth(640);
+                grabber.setImageHeight(480);
+                grabber.setFrameRate(30);
+                logger.info("Using fallback camera configuration");
+            } catch (Exception fallbackError) {
+                logger.error("Fallback camera configuration also failed: ", fallbackError);
+                throw new RuntimeException("Camera initialization failed", fallbackError);
+            }
+        }
         
         logger.info("Face recognition system initialized successfully");
+    }
+    
+    /**
+     * Validate security requirements
+     */
+    private void validateSecurityRequirements() {
+        // Check if encryption is properly configured
+        if (config.getBoolean(ConfigurationManager.ENABLE_ENCRYPTION)) {
+            logger.info("Encryption is enabled");
+        }
+        
+        // Validate session timeout
+        long timeout = config.getInt(ConfigurationManager.SESSION_TIMEOUT);
+        if (timeout < 300000) { // Less than 5 minutes
+            logger.warn("Session timeout is very short: {} ms", timeout);
+        }
+        
+        // Log security configuration
+        logger.info("Max login attempts: {}", config.getInt(ConfigurationManager.MAX_LOGIN_ATTEMPTS));
+        logger.info("Audit logging: {}", config.getBoolean(ConfigurationManager.AUDIT_LOGGING));
     }
     
     /**
@@ -250,6 +336,9 @@ public class Main {
                     
                     // Update GUI if available
                     if (gui != null) {
+                        // Update video feed first
+                        gui.updateVideoFrame(frame);
+                        
                         if (faceDetected && recognizedPerson != null) {
                             gui.onPersonRecognized(recognizedPerson, maxConfidence);
                         } else if (faceDetected) {
@@ -402,4 +491,158 @@ public class Main {
     public FaceRecognizer getFaceRecognizer() { return faceRecognizer; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public boolean isRunning() { return isRunning; }
+    
+    /**
+     * Enhanced camera start method for GUI integration
+     */
+    public void startCameraForGUI() {
+        try {
+            if (!isRunning) {
+                grabber.start();
+                isRunning = true;
+                logger.info("Camera started for GUI");
+                
+                // Start video processing thread for GUI
+                if (gui != null) {
+                    Thread videoThread = new Thread(this::processVideoForGUI);
+                    videoThread.setDaemon(true);
+                    videoThread.start();
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error starting camera for GUI: ", e);
+            isRunning = false;
+        }
+    }
+    
+    /**
+     * Enhanced camera stop method for GUI integration
+     */
+    public void stopCameraForGUI() {
+        try {
+            if (isRunning) {
+                isRunning = false;
+                if (grabber != null) {
+                    grabber.stop();
+                }
+                logger.info("Camera stopped for GUI");
+            }
+        } catch (Exception e) {
+            logger.error("Error stopping camera for GUI: ", e);
+        }
+    }
+    
+    /**
+     * Process video frames for GUI display and recognition
+     */
+    private void processVideoForGUI() {
+        OpenCVFrameConverter.ToMat converter = new OpenCVFrameConverter.ToMat();
+        
+        try {
+            while (isRunning) {
+                Frame frame = grabber.grab();
+                if (frame == null) {
+                    continue;
+                }
+                
+                // Update GUI video display
+                if (gui != null) {
+                    gui.updateVideoFrame(frame);
+                }
+                
+                // Perform face recognition
+                try {
+                    Mat mat = converter.convert(frame);
+                    if (mat != null && !mat.empty()) {
+                        // Detect faces
+                        RectVector faces = faceDetector.detectFaces(mat);
+                        
+                        if (faces.size() > 0) {
+                            // Use the largest face for recognition
+                            Rect largestFace = findLargestFace(faces);
+                            Mat faceRegion = new Mat(mat, largestFace);
+                            
+                            // Recognize the face
+                            String personName = faceRecognizer.recognizeFace(faceRegion, databaseManager);
+                            double confidence = faceRecognizer.getLastRecognitionConfidence();
+                            
+                            // Update GUI with recognition result
+                            if (gui != null) {
+                                gui.updateRecognitionResult(personName, confidence);
+                            }
+                            
+                            faceRegion.release();
+                        } else {
+                            // No face detected
+                            if (gui != null) {
+                                gui.updateRecognitionResult("No face detected", 0.0);
+                            }
+                        }
+                        
+                        mat.release();
+                    }
+                } catch (Exception e) {
+                    logger.debug("Error in frame processing: ", e);
+                }
+                
+                // Limit frame rate
+                Thread.sleep(33); // ~30 FPS
+            }
+        } catch (Exception e) {
+            logger.error("Error in video processing: ", e);
+        } finally {
+            converter.close();
+        }
+    }
+    
+    /**
+     * Find the largest face in the detected faces
+     */
+    private Rect findLargestFace(RectVector faces) {
+        Rect largestFace = faces.get(0);
+        int largestArea = largestFace.width() * largestFace.height();
+        
+        for (int i = 1; i < faces.size(); i++) {
+            Rect face = faces.get(i);
+            int area = face.width() * face.height();
+            if (area > largestArea) {
+                largestArea = area;
+                largestFace = face;
+            }
+        }
+        
+        return largestFace;
+    }
+    
+    /**
+     * Set the GUI reference for integration
+     */
+    public void setGUI(FaceRecognitionGUI gui) {
+        this.gui = gui;
+    }
+    
+    /**
+     * Update recognition threshold dynamically
+     */
+    public void updateRecognitionThreshold(double newThreshold) {
+        if (faceRecognizer != null) {
+            // Create new recognizer with updated threshold
+            faceRecognizer = new FaceRecognizer(newThreshold);
+            logger.info("Recognition threshold updated to: {}", newThreshold);
+        }
+    }
+    
+    /**
+     * Get current frame for GUI processing
+     */
+    public Frame getCurrentFrame() {
+        try {
+            if (grabber != null && isRunning) {
+                return grabber.grab();
+            }
+        } catch (Exception e) {
+            logger.debug("Error getting current frame: ", e);
+        }
+        return null;
+    }
 }
