@@ -1,6 +1,10 @@
 package com.facerecognition.gui;
 
 import com.facerecognition.Main;
+import com.facerecognition.gui.AdvancedSettingsPanel;
+import org.bytedeco.javacv.CanvasFrame;
+import org.bytedeco.javacv.Frame;
+import org.bytedeco.javacv.Java2DFrameConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,8 +13,13 @@ import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Swing GUI for the Face Recognition System
@@ -54,10 +63,37 @@ public class FaceRecognitionGUI extends JFrame {
     private JTextArea recognitionHistoryArea;
     private JButton testRecognitionButton;
     
+    // Video feed components
+    private JLabel videoFeedLabel;
+    private BufferedImage currentFrame;
+    private Java2DFrameConverter frameConverter;
+    private ScheduledExecutorService videoUpdateExecutor;
+    private JPanel videoPanel;
+    private JCheckBox showDetectionBoxes;
+    private JCheckBox showConfidenceScore;
+    private JSlider recognitionThresholdSlider;
+    private JLabel thresholdValueLabel;
+    
+    // Advanced features
+    private JButton batchRegisterButton;
+    private JButton exportDataButton;
+    private JButton importDataButton;
+    private JTextArea recognitionLogArea;
+    private JTabbedPane mainTabbedPane;
+    private JProgressBar processingProgress;
+    private JLabel fpsLabel;
+    private int frameCount = 0;
+    private long lastFpsTime = System.currentTimeMillis();
+    
+    // Multi-threading
+    private ExecutorService backgroundExecutor;
+    
     // Status tracking
     private boolean cameraRunning = false;
     private String lastRecognizedPerson = "None";
     private double lastConfidence = 0.0;
+    private int recognitionCount = 0;
+    private long sessionStartTime = System.currentTimeMillis();
     
     /**
      * Constructor
@@ -65,40 +101,16 @@ public class FaceRecognitionGUI extends JFrame {
      */
     public FaceRecognitionGUI(Main mainApp) {
         this.mainApp = mainApp;
+        this.frameConverter = new Java2DFrameConverter();
+        this.backgroundExecutor = Executors.newFixedThreadPool(2);
+        this.videoUpdateExecutor = Executors.newScheduledThreadPool(1);
+        
         initializeGUI();
         updatePersonsList();
         updateStats();
+        startVideoUpdateTimer();
         
-        logger.info("Face Recognition GUI initialized");
-    }
-    
-    /**
-     * Initialize the GUI components and layout
-     */
-    private void initializeGUI() {
-        setTitle("Real-Time Face Recognition System");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 600);
-        setLocationRelativeTo(null);
-        
-        // Set application icon (if available)
-        try {
-            // You can add an icon file to resources if desired
-            setIconImage(Toolkit.getDefaultToolkit().getImage(
-                getClass().getResource("/icon.png")));
-        } catch (Exception e) {
-            // Icon not available, continue without it
-        }
-        
-        // Create main layout
-        setLayout(new BorderLayout(10, 10));
-        
-        // Create and add components
-        add(createControlPanel(), BorderLayout.NORTH);
-        add(createCenterPanel(), BorderLayout.CENTER);
-        add(createStatusPanel(), BorderLayout.SOUTH);
-        
-        // Add window listener for cleanup
+        // Add shutdown hook to clean up resources
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -106,6 +118,456 @@ public class FaceRecognitionGUI extends JFrame {
                 System.exit(0);
             }
         });
+        
+        logger.info("Enhanced Face Recognition GUI initialized");
+    }
+    
+    /**
+     * Initialize the GUI components and layout
+     */
+    private void initializeGUI() {
+        setTitle("Advanced Real-Time Face Recognition System v2.0");
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        setSize(1200, 800);
+        setLocationRelativeTo(null);
+        
+        // Set modern look and feel
+        try {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not set system look and feel", e);
+        }
+        
+        // Create main tabbed interface
+        mainTabbedPane = new JTabbedPane();
+        
+        // Tab 1: Live Recognition
+        JPanel liveRecognitionTab = createLiveRecognitionTab();
+        mainTabbedPane.addTab("🎥 Live Recognition", liveRecognitionTab);
+        
+        // Tab 2: Person Management
+        JPanel personManagementTab = createPersonManagementTab();
+        mainTabbedPane.addTab("👥 Person Management", personManagementTab);
+        
+        // Tab 3: Analytics & Reports
+        JPanel analyticsTab = createAnalyticsTab();
+        mainTabbedPane.addTab("📊 Analytics", analyticsTab);
+        
+        // Tab 4: System Settings
+        // Create advanced settings panel
+        AdvancedSettingsPanel settingsTab = new AdvancedSettingsPanel(this);
+        mainTabbedPane.addTab("⚙️ Settings", settingsTab);
+        
+        add(mainTabbedPane, BorderLayout.CENTER);
+        add(createStatusBar(), BorderLayout.SOUTH);
+        
+        // Initialize default states
+        updateButtonStates();
+    }
+    
+    /**
+     * Create the live recognition tab with video feed
+     * @return Live recognition panel
+     */
+    private JPanel createLiveRecognitionTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Video feed panel (left side)
+        videoPanel = new JPanel(new BorderLayout());
+        videoPanel.setBorder(new TitledBorder("Live Video Feed"));
+        videoPanel.setPreferredSize(new Dimension(640, 480));
+        
+        videoFeedLabel = new JLabel("Click 'Start Camera' to begin", SwingConstants.CENTER);
+        videoFeedLabel.setBackground(Color.BLACK);
+        videoFeedLabel.setOpaque(true);
+        videoFeedLabel.setForeground(Color.WHITE);
+        videoFeedLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+        videoPanel.add(videoFeedLabel, BorderLayout.CENTER);
+        
+        // Video controls
+        JPanel videoControls = new JPanel(new FlowLayout());
+        startCameraButton = new JButton("▶ Start Camera");
+        stopCameraButton = new JButton("⏹ Stop Camera");
+        showDetectionBoxes = new JCheckBox("Show Detection Boxes", true);
+        showConfidenceScore = new JCheckBox("Show Confidence", true);
+        
+        startCameraButton.addActionListener(e -> startCamera());
+        stopCameraButton.addActionListener(e -> stopCamera());
+        stopCameraButton.setEnabled(false);
+        
+        videoControls.add(startCameraButton);
+        videoControls.add(stopCameraButton);
+        videoControls.add(showDetectionBoxes);
+        videoControls.add(showConfidenceScore);
+        
+        videoPanel.add(videoControls, BorderLayout.SOUTH);
+        
+        // Recognition panel (right side)
+        JPanel recognitionSide = new JPanel(new BorderLayout());
+        recognitionSide.setPreferredSize(new Dimension(400, 480));
+        
+        // Current recognition display
+        recognitionPanel = createRecognitionMonitorPanel();
+        recognitionSide.add(recognitionPanel, BorderLayout.NORTH);
+        
+        // Registration panel
+        JPanel registrationPanel = new JPanel();
+        registrationPanel.setBorder(new TitledBorder("Quick Registration"));
+        registrationPanel.setLayout(new BoxLayout(registrationPanel, BoxLayout.Y_AXIS));
+        
+        JPanel namePanel = new JPanel(new FlowLayout());
+        namePanel.add(new JLabel("Name:"));
+        personNameField = new JTextField(15);
+        namePanel.add(personNameField);
+        
+        registerPersonButton = new JButton("📷 Register Current Face");
+        registerPersonButton.addActionListener(e -> registerPerson());
+        
+        registrationPanel.add(namePanel);
+        registrationPanel.add(Box.createVerticalStrut(10));
+        registrationPanel.add(registerPersonButton);
+        
+        recognitionSide.add(registrationPanel, BorderLayout.CENTER);
+        
+        // FPS and performance info
+        JPanel performancePanel = new JPanel(new GridLayout(2, 1));
+        performancePanel.setBorder(new TitledBorder("Performance"));
+        fpsLabel = new JLabel("FPS: 0");
+        JLabel processingLabel = new JLabel("Processing: Ready");
+        performancePanel.add(fpsLabel);
+        performancePanel.add(processingLabel);
+        recognitionSide.add(performancePanel, BorderLayout.SOUTH);
+        
+        panel.add(videoPanel, BorderLayout.CENTER);
+        panel.add(recognitionSide, BorderLayout.EAST);
+        
+        return panel;
+    }
+    
+    /**
+     * Create the person management tab
+     * @return Person management panel
+     */
+    private JPanel createPersonManagementTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Person list (left side)
+        JPanel listPanel = new JPanel(new BorderLayout());
+        listPanel.setBorder(new TitledBorder("Registered Persons"));
+        listPanel.setPreferredSize(new Dimension(300, 400));
+        
+        personsListModel = new DefaultListModel<>();
+        personsList = new JList<>(personsListModel);
+        personsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane listScrollPane = new JScrollPane(personsList);
+        listPanel.add(listScrollPane, BorderLayout.CENTER);
+        
+        // Person management buttons
+        JPanel buttonPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+        refreshButton = new JButton("🔄 Refresh List");
+        deletePersonButton = new JButton("🗑 Delete Selected");
+        batchRegisterButton = new JButton("📁 Batch Register");
+        testRecognitionButton = new JButton("🧪 Test Recognition");
+        
+        refreshButton.addActionListener(e -> updatePersonsList());
+        deletePersonButton.addActionListener(e -> deletePerson());
+        batchRegisterButton.addActionListener(e -> batchRegister());
+        testRecognitionButton.addActionListener(e -> testPersonAccuracy());
+        
+        buttonPanel.add(refreshButton);
+        buttonPanel.add(deletePersonButton);
+        buttonPanel.add(batchRegisterButton);
+        buttonPanel.add(testRecognitionButton);
+        
+        listPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Person details and actions (right side)
+        JPanel detailsPanel = new JPanel(new BorderLayout());
+        detailsPanel.setBorder(new TitledBorder("Person Details & Actions"));
+        
+        // Person info display
+        JTextArea personInfoArea = new JTextArea(10, 30);
+        personInfoArea.setEditable(false);
+        personInfoArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane infoScrollPane = new JScrollPane(personInfoArea);
+        detailsPanel.add(infoScrollPane, BorderLayout.CENTER);
+        
+        // Action buttons
+        JPanel actionPanel = new JPanel(new FlowLayout());
+        JButton addMoreSamplesButton = new JButton("➕ Add More Samples");
+        JButton exportPersonButton = new JButton("💾 Export Person Data");
+        JButton viewHistoryButton = new JButton("📈 View Recognition History");
+        
+        addMoreSamplesButton.addActionListener(e -> addMoreSamples());
+        exportPersonButton.addActionListener(e -> exportPersonData());
+        viewHistoryButton.addActionListener(e -> viewRecognitionHistory());
+        
+        actionPanel.add(addMoreSamplesButton);
+        actionPanel.add(exportPersonButton);
+        actionPanel.add(viewHistoryButton);
+        
+        detailsPanel.add(actionPanel, BorderLayout.SOUTH);
+        
+        panel.add(listPanel, BorderLayout.WEST);
+        panel.add(detailsPanel, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    /**
+     * Create the analytics tab
+     * @return Analytics panel
+     */
+    private JPanel createAnalyticsTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Statistics panel
+        JPanel statsPanel = new JPanel(new GridLayout(2, 3, 10, 10));
+        statsPanel.setBorder(new TitledBorder("System Statistics"));
+        
+        statsLabel = new JLabel("Total Persons: 0");
+        JLabel sessionStatsLabel = new JLabel("Session Recognition: 0");
+        JLabel accuracyLabel = new JLabel("Average Accuracy: 0%");
+        JLabel uptimeLabel = new JLabel("Session Uptime: 0m");
+        JLabel dbSizeLabel = new JLabel("Database Size: 0 KB");
+        JLabel performanceLabel = new JLabel("Performance: Good");
+        
+        statsPanel.add(statsLabel);
+        statsPanel.add(sessionStatsLabel);
+        statsPanel.add(accuracyLabel);
+        statsPanel.add(uptimeLabel);
+        statsPanel.add(dbSizeLabel);
+        statsPanel.add(performanceLabel);
+        
+        // Recognition log
+        JPanel logPanel = new JPanel(new BorderLayout());
+        logPanel.setBorder(new TitledBorder("Recognition Log"));
+        
+        recognitionLogArea = new JTextArea(15, 50);
+        recognitionLogArea.setEditable(false);
+        recognitionLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+        JScrollPane logScrollPane = new JScrollPane(recognitionLogArea);
+        logPanel.add(logScrollPane, BorderLayout.CENTER);
+        
+        // Log controls
+        JPanel logControls = new JPanel(new FlowLayout());
+        JButton clearLogButton = new JButton("🗑 Clear Log");
+        JButton exportLogButton = new JButton("💾 Export Log");
+        JButton refreshLogButton = new JButton("🔄 Refresh");
+        
+        clearLogButton.addActionListener(e -> recognitionLogArea.setText(""));
+        exportLogButton.addActionListener(e -> exportRecognitionLog());
+        refreshLogButton.addActionListener(e -> updateRecognitionLog());
+        
+        logControls.add(clearLogButton);
+        logControls.add(exportLogButton);
+        logControls.add(refreshLogButton);
+        
+        logPanel.add(logControls, BorderLayout.SOUTH);
+        
+        panel.add(statsPanel, BorderLayout.NORTH);
+        panel.add(logPanel, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    /**
+     * Create the settings tab
+     * @return Settings panel
+     */
+    private JPanel createSettingsTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Recognition settings
+        JPanel recognitionSettings = new JPanel();
+        recognitionSettings.setBorder(new TitledBorder("Recognition Settings"));
+        recognitionSettings.setLayout(new BoxLayout(recognitionSettings, BoxLayout.Y_AXIS));
+        
+        // Threshold slider
+        JPanel thresholdPanel = new JPanel(new FlowLayout());
+        thresholdPanel.add(new JLabel("Recognition Threshold:"));
+        recognitionThresholdSlider = new JSlider(0, 100, 35);
+        recognitionThresholdSlider.setMajorTickSpacing(25);
+        recognitionThresholdSlider.setMinorTickSpacing(5);
+        recognitionThresholdSlider.setPaintTicks(true);
+        recognitionThresholdSlider.setPaintLabels(true);
+        thresholdValueLabel = new JLabel("0.35");
+        
+        recognitionThresholdSlider.addChangeListener(e -> {
+            double value = recognitionThresholdSlider.getValue() / 100.0;
+            thresholdValueLabel.setText(String.format("%.2f", value));
+            updateRecognitionThreshold(value);
+        });
+        
+        thresholdPanel.add(recognitionThresholdSlider);
+        thresholdPanel.add(thresholdValueLabel);
+        recognitionSettings.add(thresholdPanel);
+        
+        // Camera settings
+        JPanel cameraSettings = new JPanel();
+        cameraSettings.setBorder(new TitledBorder("Camera Settings"));
+        cameraSettings.setLayout(new GridLayout(3, 2, 5, 5));
+        
+        cameraSettings.add(new JLabel("Camera Index:"));
+        JSpinner cameraIndexSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 10, 1));
+        cameraSettings.add(cameraIndexSpinner);
+        
+        cameraSettings.add(new JLabel("Resolution:"));
+        JComboBox<String> resolutionCombo = new JComboBox<>(new String[]{"640x480", "800x600", "1024x768", "1280x720"});
+        cameraSettings.add(resolutionCombo);
+        
+        cameraSettings.add(new JLabel("Frame Rate:"));
+        JSpinner fpsSpinner = new JSpinner(new SpinnerNumberModel(30, 5, 60, 5));
+        cameraSettings.add(fpsSpinner);
+        
+        // Database settings
+        JPanel databaseSettings = new JPanel();
+        databaseSettings.setBorder(new TitledBorder("Database Settings"));
+        databaseSettings.setLayout(new GridLayout(4, 1, 5, 5));
+        
+        JButton backupButton = new JButton("💾 Backup Database");
+        JButton restoreButton = new JButton("📂 Restore Database");
+        exportDataButton = new JButton("📤 Export All Data");
+        importDataButton = new JButton("📥 Import Data");
+        
+        backupButton.addActionListener(e -> backupDatabase());
+        restoreButton.addActionListener(e -> restoreDatabase());
+        exportDataButton.addActionListener(e -> exportAllData());
+        importDataButton.addActionListener(e -> importData());
+        
+        databaseSettings.add(backupButton);
+        databaseSettings.add(restoreButton);
+        databaseSettings.add(exportDataButton);
+        databaseSettings.add(importDataButton);
+        
+        // Layout settings panels
+        JPanel settingsContainer = new JPanel(new GridLayout(3, 1, 10, 10));
+        settingsContainer.add(recognitionSettings);
+        settingsContainer.add(cameraSettings);
+        settingsContainer.add(databaseSettings);
+        
+        panel.add(settingsContainer, BorderLayout.NORTH);
+        
+        return panel;
+    }
+    
+    /**
+     * Create the status bar
+     * @return Status bar panel
+     */
+    private JPanel createStatusBar() {
+        JPanel statusBar = new JPanel(new BorderLayout());
+        statusBar.setBorder(BorderFactory.createLoweredBevelBorder());
+        
+        statusLabel = new JLabel("Ready");
+        statusBar.add(statusLabel, BorderLayout.WEST);
+        
+        processingProgress = new JProgressBar();
+        processingProgress.setStringPainted(true);
+        processingProgress.setString("Idle");
+        processingProgress.setPreferredSize(new Dimension(200, 20));
+        statusBar.add(processingProgress, BorderLayout.EAST);
+        
+        return statusBar;
+    }
+    
+    /**
+     * Update button states based on current status
+     */
+    private void updateButtonStates() {
+        if (startCameraButton != null) {
+            startCameraButton.setEnabled(!cameraRunning);
+        }
+        if (stopCameraButton != null) {
+            stopCameraButton.setEnabled(cameraRunning);
+        }
+        if (registerPersonButton != null) {
+            registerPersonButton.setEnabled(cameraRunning);
+        }
+    }
+    
+    /**
+     * Start video update timer
+     */
+    private void startVideoUpdateTimer() {
+        videoUpdateExecutor.scheduleAtFixedRate(() -> {
+            if (cameraRunning && currentFrame != null) {
+                SwingUtilities.invokeLater(() -> {
+                    videoFeedLabel.setIcon(new ImageIcon(currentFrame));
+                    updateFPS();
+                });
+            }
+        }, 0, 33, TimeUnit.MILLISECONDS); // ~30 FPS
+    }
+    
+    /**
+     * Update FPS display
+     */
+    private void updateFPS() {
+        frameCount++;
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastFpsTime >= 1000) {
+            if (fpsLabel != null) {
+                fpsLabel.setText("FPS: " + frameCount);
+            }
+            frameCount = 0;
+            lastFpsTime = currentTime;
+        }
+    }
+    
+    /**
+     * Cleanup resources
+     */
+    private void cleanup() {
+        logger.info("Cleaning up GUI resources...");
+        
+        // Calculate session duration
+        long sessionDuration = System.currentTimeMillis() - sessionStartTime;
+        long minutes = sessionDuration / (60 * 1000);
+        logger.info("Session duration: {} minutes, Recognition count: {}", minutes, recognitionCount);
+        
+        if (cameraRunning) {
+            mainApp.stopCamera();
+        }
+        
+        if (videoUpdateExecutor != null && !videoUpdateExecutor.isShutdown()) {
+            videoUpdateExecutor.shutdown();
+            try {
+                if (!videoUpdateExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                    videoUpdateExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                videoUpdateExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        if (backgroundExecutor != null && !backgroundExecutor.isShutdown()) {
+            backgroundExecutor.shutdown();
+            try {
+                if (!backgroundExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                    backgroundExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                backgroundExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        if (frameConverter != null) {
+            frameConverter.close();
+        }
+        
+        logger.info("GUI resources cleaned up successfully");
     }
     
     /**
@@ -185,12 +647,6 @@ public class FaceRecognitionGUI extends JFrame {
         deletePersonButton = new JButton("Delete Person");
         deletePersonButton.addActionListener(e -> deletePerson());
         buttonPanel.add(deletePersonButton);
-        
-        JButton clearAllButton = new JButton("Clear All Data");
-        clearAllButton.addActionListener(e -> clearAllData());
-        clearAllButton.setBackground(new Color(255, 100, 100));
-        clearAllButton.setForeground(Color.WHITE);
-        buttonPanel.add(clearAllButton);
         
         leftPanel.add(buttonPanel, BorderLayout.SOUTH);
         
@@ -321,6 +777,10 @@ public class FaceRecognitionGUI extends JFrame {
             statusLabel.setText("Camera running - Face recognition active");
             appendStatus("Camera started successfully. Face recognition is now active.");
             
+            // Update video feed label
+            videoFeedLabel.setText("Loading camera feed...");
+            videoFeedLabel.setIcon(null);
+            
         } catch (Exception e) {
             logger.error("Error starting camera", e);
             appendStatus("Error starting camera: " + e.getMessage());
@@ -348,6 +808,10 @@ public class FaceRecognitionGUI extends JFrame {
             
             statusLabel.setText("Ready - Camera stopped");
             appendStatus("Camera stopped.");
+            
+            // Clear video feed
+            videoFeedLabel.setIcon(null);
+            videoFeedLabel.setText("Click 'Start Camera' to begin");
             
         } catch (Exception e) {
             logger.error("Error stopping camera", e);
@@ -463,37 +927,6 @@ public class FaceRecognitionGUI extends JFrame {
     }
     
     /**
-     * Clear all data from the database
-     */
-    private void clearAllData() {
-        int result = JOptionPane.showConfirmDialog(this,
-            "Are you sure you want to delete ALL persons and face data?\n" +
-            "This action cannot be undone and will clear the entire database.\n\n" +
-            "This is useful if you have incompatible face embeddings from previous versions.",
-            "Confirm Clear All Data", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        
-        if (result == JOptionPane.YES_OPTION) {
-            boolean success = mainApp.getDatabaseManager().clearAllData();
-            
-            if (success) {
-                appendStatus("Cleared all database data successfully");
-                updatePersonsList();
-                updateStats();
-                
-                JOptionPane.showMessageDialog(this,
-                    "All data cleared successfully.\n" +
-                    "You can now register persons with the new face recognition system.",
-                    "Clear Successful", JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                appendStatus("Failed to clear database data");
-                JOptionPane.showMessageDialog(this,
-                    "Failed to clear database data.",
-                    "Clear Failed", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-    
-    /**
      * Update the list of registered persons
      */
     private void updatePersonsList() {
@@ -601,26 +1034,6 @@ public class FaceRecognitionGUI extends JFrame {
     }
     
     /**
-     * Cleanup resources when closing the application
-     */
-    private void cleanup() {
-        logger.info("Cleaning up GUI resources...");
-        
-        if (cameraRunning) {
-            stopCamera();
-        }
-        
-        // Give some time for cleanup
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        
-        logger.info("GUI cleanup completed");
-    }
-    
-    /**
      * Check the current face being detected
      */
     private void checkCurrentFace() {
@@ -703,7 +1116,7 @@ public class FaceRecognitionGUI extends JFrame {
      * @param personName Name of recognized person or status message
      * @param confidence Confidence level (0.0 to 1.0)
      */
-    private void updateRecognitionResult(String personName, double confidence) {
+    public void updateRecognitionResult(String personName, double confidence) {
         SwingUtilities.invokeLater(() -> {
             recognitionResultLabel.setText(personName);
             
@@ -1087,5 +1500,175 @@ public class FaceRecognitionGUI extends JFrame {
      */
     private String testSingleRecognition() throws Exception {
         return mainApp.performSingleRecognitionTest();
+    }
+    
+    // Additional methods for enhanced GUI functionality
+    
+    /**
+     * Batch register multiple faces
+     */
+    private void batchRegister() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setDialogTitle("Select folder containing person folders with images");
+        
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for batch registration
+            JOptionPane.showMessageDialog(this, "Batch registration feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Export person data
+     */
+    private void exportPersonData() {
+        String selectedPerson = personsList.getSelectedValue();
+        if (selectedPerson == null) {
+            JOptionPane.showMessageDialog(this, "Please select a person to export.", "No Selection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save person data");
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for exporting person data
+            JOptionPane.showMessageDialog(this, "Export feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * View recognition history
+     */
+    private void viewRecognitionHistory() {
+        String selectedPerson = personsList.getSelectedValue();
+        if (selectedPerson == null) {
+            JOptionPane.showMessageDialog(this, "Please select a person to view history.", "No Selection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Implementation for viewing recognition history
+        JDialog historyDialog = new JDialog(this, "Recognition History: " + selectedPerson, true);
+        historyDialog.setSize(600, 400);
+        historyDialog.setLocationRelativeTo(this);
+        
+        JTextArea historyArea = new JTextArea("Recognition history for " + selectedPerson + " will be displayed here.");
+        historyArea.setEditable(false);
+        historyDialog.add(new JScrollPane(historyArea));
+        
+        historyDialog.setVisible(true);
+    }
+    
+    /**
+     * Export recognition log
+     */
+    private void exportRecognitionLog() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save recognition log");
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for exporting log
+            JOptionPane.showMessageDialog(this, "Log export feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Update recognition log
+     */
+    private void updateRecognitionLog() {
+        if (recognitionLogArea != null) {
+            // Add current system status to log
+            String logEntry = String.format("[%s] System Status: %d persons registered, Camera: %s\n", 
+                java.time.LocalDateTime.now().toString(), personsListModel.getSize(), cameraRunning ? "ON" : "OFF");
+            recognitionLogArea.append(logEntry);
+            recognitionLogArea.setCaretPosition(recognitionLogArea.getDocument().getLength());
+        }
+    }
+    
+    /**
+     * Update recognition threshold
+     */
+    private void updateRecognitionThreshold(double newThreshold) {
+        // Implementation to update the recognition threshold in the main app
+        logger.info("Recognition threshold updated to: {}", newThreshold);
+        appendStatus("Recognition threshold set to: " + String.format("%.2f", newThreshold));
+    }
+    
+    /**
+     * Backup database
+     */
+    private void backupDatabase() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save database backup");
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for database backup
+            JOptionPane.showMessageDialog(this, "Database backup feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Restore database
+     */
+    private void restoreDatabase() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select database backup file");
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for database restore
+            JOptionPane.showMessageDialog(this, "Database restore feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Export all data
+     */
+    private void exportAllData() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save complete data export");
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for complete data export
+            JOptionPane.showMessageDialog(this, "Complete data export feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Import data
+     */
+    private void importData() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select data file to import");
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            // Implementation for data import
+            JOptionPane.showMessageDialog(this, "Data import feature coming soon!", "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+    
+    /**
+     * Update current frame for video display
+     */
+    public void updateVideoFrame(Frame frame) {
+        if (frame != null && frameConverter != null) {
+            currentFrame = frameConverter.convert(frame);
+            
+            // Update the video feed display in the EDT
+            SwingUtilities.invokeLater(() -> {
+                if (videoFeedLabel != null && currentFrame != null) {
+                    // Scale the image to fit the display
+                    int displayWidth = videoFeedLabel.getWidth();
+                    int displayHeight = videoFeedLabel.getHeight();
+                    
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        BufferedImage scaledImage = new BufferedImage(displayWidth, displayHeight, BufferedImage.TYPE_INT_RGB);
+                        Graphics2D g2d = scaledImage.createGraphics();
+                        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        g2d.drawImage(currentFrame, 0, 0, displayWidth, displayHeight, null);
+                        g2d.dispose();
+                        
+                        videoFeedLabel.setIcon(new ImageIcon(scaledImage));
+                        videoFeedLabel.setText(""); // Remove text when showing video
+                    } else {
+                        videoFeedLabel.setIcon(new ImageIcon(currentFrame));
+                        videoFeedLabel.setText(""); // Remove text when showing video
+                    }
+                }
+            });
+        }
     }
 }
