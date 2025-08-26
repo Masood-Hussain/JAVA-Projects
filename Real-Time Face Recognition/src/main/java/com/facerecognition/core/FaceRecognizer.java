@@ -787,691 +787,103 @@ public class FaceRecognizer {
         
         return Math.max(0.0, Math.min(1.0, hybridSimilarity));
     }
-    
-    /**
-     * Calculate advanced similarity with additional metrics and normalization
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Advanced similarity value (0.0 to 1.0)
-     */
-    private double calculateAdvancedSimilarity(double[] embedding1, double[] embedding2) {
-        // 1. Standard hybrid similarity
-        double hybridSim = calculateHybridSimilarity(embedding1, embedding2);
-        
-        // 2. Manhattan distance similarity
-        double manhattanSim = calculateManhattanSimilarity(embedding1, embedding2);
-        
-        // 3. Chi-square similarity for histogram-like features
-        double chiSquareSim = calculateChiSquareSimilarity(embedding1, embedding2);
-        
-        // 4. Advanced cosine with feature weighting
-        double weightedCosineSim = calculateWeightedCosineSimilarity(embedding1, embedding2);
-        
-        // Multi-metric weighted combination
-        double advancedSimilarity = (0.4 * hybridSim) + 
-                                  (0.25 * manhattanSim) + 
-                                  (0.2 * weightedCosineSim) + 
-                                  (0.15 * chiSquareSim);
-        
-        // Apply confidence boosting for strong matches
-        if (advancedSimilarity > 0.6) {
-            advancedSimilarity = Math.min(1.0, advancedSimilarity * 1.05);
-        }
-        
-        return Math.max(0.0, Math.min(1.0, advancedSimilarity));
+    /** Basic Manhattan similarity (1 - normalized L1 distance) */
+    private double calculateManhattanSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        double sum = 0.0;
+        for (int i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+        double max = 2.0 * a.length; // since features are normalized roughly in [-1,1] after normalization
+        double sim = 1.0 - (sum / max);
+        return sim < 0 ? 0 : (sim > 1 ? 1 : sim);
     }
-    
-    /**
-     * Calculate Manhattan distance similarity
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Manhattan similarity value (0.0 to 1.0)
-     */
-    private double calculateManhattanSimilarity(double[] embedding1, double[] embedding2) {
-        double sumAbsDiff = 0.0;
-        
-        for (int i = 0; i < embedding1.length; i++) {
-            sumAbsDiff += Math.abs(embedding1[i] - embedding2[i]);
-        }
-        
-        // Normalize by maximum possible Manhattan distance
-        double maxPossibleDistance = 2.0 * embedding1.length; // Assuming normalized features
-        double similarity = 1.0 - (sumAbsDiff / maxPossibleDistance);
-        
-        return Math.max(0.0, Math.min(1.0, similarity));
-    }
-    
-    /**
-     * Calculate Chi-square similarity for histogram features
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Chi-square similarity value (0.0 to 1.0)
-     */
-    private double calculateChiSquareSimilarity(double[] embedding1, double[] embedding2) {
-        double chiSquare = 0.0;
-        
-        for (int i = 0; i < embedding1.length; i++) {
-            double sum = embedding1[i] + embedding2[i];
-            if (sum > 1e-10) {
-                double diff = embedding1[i] - embedding2[i];
-                chiSquare += (diff * diff) / sum;
-            }
-        }
-        
-        // Convert to similarity
-        double similarity = 1.0 / (1.0 + chiSquare / embedding1.length);
-        
-        return Math.max(0.0, Math.min(1.0, similarity));
-    }
-    
-    /**
-     * Calculate weighted cosine similarity with feature importance
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Weighted cosine similarity value (0.0 to 1.0)
-     */
-    private double calculateWeightedCosineSimilarity(double[] embedding1, double[] embedding2) {
-        double dotProduct = 0.0;
-        double norm1 = 0.0;
-        double norm2 = 0.0;
 
-        // Apply feature weights (higher weights for more discriminative features)
-        for (int i = 0; i < embedding1.length; i++) {
-            // Weight heuristic based on absolute value (proxy for variance / importance)
-            double weight = 1.0 + Math.min(0.5, Math.abs(embedding1[i]));
-                // Accept fallback only if sufficiently close to base threshold (tighter than before)
-            double v2 = embedding2[i] * weight;
-                if (fallbackBest >= (baseThreshold - 0.02)) {
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
-        }
-        if (norm1 < 1e-9 || norm2 < 1e-9) return 0.0;
-            // Disambiguation: require separation from second-best different-person match
-            double disambiguationMargin = 0.05; // require at least 0.05 gap
-            if (!bestMatch.equals("Unknown") && !secondBestMatch.equals("Unknown") &&
-                (bestSimilarity - secondBestSimilarity) < disambiguationMargin) {
-                logger.debug("Ambiguous match: best={} ({}) second={} ({}). Marking as Unknown.",
-                        bestMatch, String.format("%.3f", bestSimilarity),
-                        secondBestMatch, String.format("%.3f", secondBestSimilarity));
-                return "Unknown";
+    /** Chi-square similarity for histogram-like vectors */
+    private double calculateChiSquareSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        double chi = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            double s = a[i] + b[i];
+            if (s > 1e-12) {
+                double d = a[i] - b[i];
+                chi += (d * d) / s;
             }
-        double cosine = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
-        return Math.max(0.0, Math.min(1.0, cosine));
-    }
-    /**
-     * Calculate Euclidean distance similarity
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Euclidean similarity value (0.0 to 1.0)
-     */
-    private double calculateEuclideanSimilarity(double[] embedding1, double[] embedding2) {
-        double sumSquaredDiff = 0.0;
-        
-        for (int i = 0; i < embedding1.length; i++) {
-            double diff = embedding1[i] - embedding2[i];
-            sumSquaredDiff += diff * diff;
         }
-        
-        double euclideanDistance = Math.sqrt(sumSquaredDiff);
-        
-        // Convert distance to similarity (normalized)
-        double maxPossibleDistance = Math.sqrt(2.0 * embedding1.length); // Assuming normalized features
-        double similarity = 1.0 - (euclideanDistance / maxPossibleDistance);
-        
-        return Math.max(0.0, Math.min(1.0, similarity));
+        double sim = 1.0 / (1.0 + chi / a.length);
+        return sim < 0 ? 0 : (sim > 1 ? 1 : sim);
     }
-    
-    /**
-     * Calculate Pearson correlation coefficient
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Pearson correlation value converted to similarity (0.0 to 1.0)
-     */
-    private double calculatePearsonCorrelation(double[] embedding1, double[] embedding2) {
-        int n = embedding1.length;
-        
-        // Calculate means
-        double mean1 = 0.0, mean2 = 0.0;
+
+    /** Weighted cosine similarity */
+    private double calculateWeightedCosineSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        double dot = 0.0, n1 = 0.0, n2 = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            double w = 1.0 + Math.min(0.5, Math.abs(a[i]));
+            double v1 = a[i] * w;
+            double v2 = b[i] * w;
+            dot += v1 * v2;
+            n1 += v1 * v1;
+            n2 += v2 * v2;
+        }
+        if (n1 < 1e-9 || n2 < 1e-9) return 0.0;
+        double cos = dot / (Math.sqrt(n1) * Math.sqrt(n2));
+        return cos < 0 ? 0 : (cos > 1 ? 1 : cos);
+    }
+
+    /** Standard cosine similarity */
+    private double calculateCosineSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        double dot = 0.0, n1 = 0.0, n2 = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            n1 += a[i] * a[i];
+            n2 += b[i] * b[i];
+        }
+        if (n1 < 1e-10 || n2 < 1e-10) return 0.0;
+        double sim = dot / (Math.sqrt(n1) * Math.sqrt(n2));
+        return sim < 0 ? 0 : (sim > 1 ? 1 : sim);
+    }
+
+    /** Euclidean distance converted to similarity */
+    private double calculateEuclideanSimilarity(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        double sum = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            double d = a[i] - b[i];
+            sum += d * d;
+        }
+        double dist = Math.sqrt(sum);
+        double maxDist = Math.sqrt(2.0 * a.length); // assuming normalized
+        double sim = 1.0 - (dist / maxDist);
+        return sim < 0 ? 0 : (sim > 1 ? 1 : sim);
+    }
+
+    /** Pearson correlation converted to 0..1 similarity */
+    private double calculatePearsonCorrelation(double[] a, double[] b) {
+        if (a.length != b.length) return 0.0;
+        int n = a.length;
+        double meanA = 0, meanB = 0;
+        for (int i = 0; i < n; i++) { meanA += a[i]; meanB += b[i]; }
+        meanA /= n; meanB /= n;
+        double num = 0, sa = 0, sb = 0;
         for (int i = 0; i < n; i++) {
-            mean1 += embedding1[i];
-            mean2 += embedding2[i];
+            double da = a[i] - meanA;
+            double db = b[i] - meanB;
+            num += da * db;
+            sa += da * da;
+            sb += db * db;
         }
-        mean1 /= n;
-        mean2 /= n;
-        
-        // Calculate correlation components
-        double numerator = 0.0;
-        double sumSq1 = 0.0;
-        double sumSq2 = 0.0;
-        
-        for (int i = 0; i < n; i++) {
-            double diff1 = embedding1[i] - mean1;
-            double diff2 = embedding2[i] - mean2;
-            
-            numerator += diff1 * diff2;
-            sumSq1 += diff1 * diff1;
-            sumSq2 += diff2 * diff2;
-        }
-        
-        double denominator = Math.sqrt(sumSq1 * sumSq2);
-        
-        if (denominator < 1e-10) {
-            return 0.0;
-        }
-        
-        double correlation = numerator / denominator;
-        
-        // Convert correlation (-1 to 1) to similarity (0 to 1)
-        return (correlation + 1.0) / 2.0;
+        double den = Math.sqrt(sa * sb);
+        if (den < 1e-10) return 0.0;
+        double corr = num / den; // -1..1
+        double sim = (corr + 1.0) / 2.0;
+        return sim < 0 ? 0 : (sim > 1 ? 1 : sim);
     }
-    
-    /**
-     * Calculate cosine similarity between two feature vectors
-     * @param embedding1 First embedding
-     * @param embedding2 Second embedding
-     * @return Cosine similarity value (0.0 to 1.0)
-     */
-    private double calculateCosineSimilarity(double[] embedding1, double[] embedding2) {
-        if (embedding1.length != embedding2.length) {
-            logger.warn("Embedding vectors have different lengths: {} vs {}", 
-                       embedding1.length, embedding2.length);
-            return 0.0;
-        }
-        
-        double dotProduct = 0.0;
-        double norm1 = 0.0;
-        double norm2 = 0.0;
-        
-        for (int i = 0; i < embedding1.length; i++) {
-            dotProduct += embedding1[i] * embedding2[i];
-            norm1 += embedding1[i] * embedding1[i];
-            norm2 += embedding2[i] * embedding2[i];
-        }
-        
-        norm1 = Math.sqrt(norm1);
-        norm2 = Math.sqrt(norm2);
-        
-        if (norm1 < 1e-10 || norm2 < 1e-10) {
-            return 0.0;
-        }
-        
-        double similarity = dotProduct / (norm1 * norm2);
-        
-        // Ensure result is between 0 and 1
-        return Math.max(0.0, Math.min(1.0, similarity));
-    }
-    
-    /**
-     * Get recognition threshold
-     * @return Current recognition threshold
-     */
-    public double getRecognitionThreshold() {
-        return recognitionThreshold;
-    }
-    
-    /**
-     * Get the confidence score from the last recognition operation
-     * @return Confidence score between 0.0 and 1.0
-     */
-    public double getLastRecognitionConfidence() {
-        return lastRecognitionConfidence;
-    }
-    
-    /**
-     * Get face recognizer information
-     * @return String containing recognizer configuration
-     */
-    public String getRecognizerInfo() {
-        return String.format(
-            "FaceRecognizer Configuration:\n" +
-            "- Recognition Threshold: %.3f\n" +
-            "- Face Size: %dx%d\n" +
-            "- Feature Vector Size: %d\n" +
-            "- Histogram Bins: %d",
-            recognitionThreshold, faceSize, faceSize, 
-            featureVectorSize, histogramBins
-        );
-    }
-    
-    /**
-     * Clear caches to free memory
-     */
-    public void clearCaches() {
-        embeddingCache.clear();
-        faceQualityCache.clear();
-        personConfidenceHistory.clear();
-        personRecognitionCount.clear();
-        personQualityHistory.clear();
-        personBiometricSignature.clear();
-        logger.info("Ultra-advanced face recognition caches cleared");
-    }
-    
-    /**
-     * Generate biometric signature for ultra-precision identification
-     * @param faceRegion Face region to analyze
-     * @return Biometric signature array
-     */
-    private double[] generateBiometricSignature(Mat faceRegion) {
-        try {
-            // Ultra-advanced biometric analysis with 128 key facial metrics
-            double[] signature = new double[128];
-            
-            // Convert to grayscale for analysis
-            Mat gray = new Mat();
-            if (faceRegion.channels() > 1) {
-                opencv_imgproc.cvtColor(faceRegion, gray, opencv_imgproc.COLOR_BGR2GRAY);
-            } else {
-                gray = faceRegion.clone();
-            }
-            
-            // Facial geometry analysis
-            double[] geometryMetrics = analyzeFacialGeometry(gray);
-            System.arraycopy(geometryMetrics, 0, signature, 0, Math.min(32, geometryMetrics.length));
-            
-            // Texture pattern analysis
-            double[] textureMetrics = analyzeTexturePatterns(gray);
-            System.arraycopy(textureMetrics, 0, signature, 32, Math.min(32, textureMetrics.length));
-            
-            // Gradient distribution analysis
-            double[] gradientMetrics = analyzeGradientDistribution(gray);
-            System.arraycopy(gradientMetrics, 0, signature, 64, Math.min(32, gradientMetrics.length));
-            
-            // Frequency domain analysis
-            double[] frequencyMetrics = analyzeFrequencyDomain(gray);
-            System.arraycopy(frequencyMetrics, 0, signature, 96, Math.min(32, frequencyMetrics.length));
-            
-            gray.release();
-            return signature;
-            
-        } catch (Exception e) {
-            logger.error("Error generating biometric signature", e);
-            return new double[128]; // Return zero signature on error
-        }
-    }
-    
-    /**
-     * Analyze facial geometry for biometric signature
-     */
-    private double[] analyzeFacialGeometry(Mat gray) {
-        double[] metrics = new double[32];
-        
-        try {
-            int height = gray.rows();
-            int width = gray.cols();
-            
-            // Divide face into regions and analyze proportions
-            int regionHeight = height / 4;
-            int regionWidth = width / 4;
-            
-            int idx = 0;
-            for (int y = 0; y < 4 && idx < 16; y++) {
-                for (int x = 0; x < 4 && idx < 16; x++) {
-                    int startY = y * regionHeight;
-                    int endY = Math.min((y + 1) * regionHeight, height);
-                    int startX = x * regionWidth;
-                    int endX = Math.min((x + 1) * regionWidth, width);
-                    
-                    // Calculate region intensity variance
-                    double variance = calculateRegionVariance(gray, startX, startY, endX - startX, endY - startY);
-                    metrics[idx++] = variance;
-                }
-            }
-            
-            // Additional geometric features
-            for (int i = 16; i < 32; i++) {
-                metrics[i] = Math.random() * 0.1; // Placeholder for additional features
-            }
-            
-        } catch (Exception e) {
-            logger.warn("Error in facial geometry analysis", e);
-        }
-        
-        return metrics;
-    }
-    
-    /**
-     * Calculate region variance for geometric analysis
-     */
-    private double calculateRegionVariance(Mat gray, int x, int y, int width, int height) {
-        try {
-            double sum = 0.0;
-            double sumSquared = 0.0;
-            int count = 0;
-            
-            for (int row = y; row < y + height && row < gray.rows(); row++) {
-                for (int col = x; col < x + width && col < gray.cols(); col++) {
-                    double pixel = gray.ptr(row, col).getDouble();
-                    sum += pixel;
-                    sumSquared += pixel * pixel;
-                    count++;
-                }
-            }
-            
-            if (count > 0) {
-                double mean = sum / count;
-                double variance = (sumSquared / count) - (mean * mean);
-                return Math.sqrt(variance) / 255.0; // Normalize
-            }
-            
-        } catch (Exception e) {
-            logger.debug("Error calculating region variance", e);
-        }
-        
-        return 0.0;
-    }
-    
-    /**
-     * Analyze texture patterns for biometric signature
-     */
-    private double[] analyzeTexturePatterns(Mat gray) {
-        double[] metrics = new double[32];
-        
-        try {
-            // Simple texture analysis using gradient magnitude
-            Mat gradX = new Mat();
-            Mat gradY = new Mat();
-            opencv_imgproc.Sobel(gray, gradX, opencv_core.CV_64F, 1, 0);
-            opencv_imgproc.Sobel(gray, gradY, opencv_core.CV_64F, 0, 1);
-            
-            // Calculate texture features in different regions
-            int regionSize = Math.min(gray.rows(), gray.cols()) / 8;
-            for (int i = 0; i < 8 && i < metrics.length; i++) {
-                int startX = (i % 4) * regionSize;
-                int startY = (i / 4) * regionSize;
-                
-                if (startX < gray.cols() && startY < gray.rows()) {
-                    double textureStrength = calculateTextureStrength(gradX, gradY, startX, startY, regionSize);
-                    metrics[i] = textureStrength;
-                }
-            }
-            
-            gradX.release();
-            gradY.release();
-            
-        } catch (Exception e) {
-            logger.warn("Error in texture pattern analysis", e);
-        }
-        
-        return metrics;
-    }
-    
-    /**
-     * Calculate texture strength in a region
-     */
-    private double calculateTextureStrength(Mat gradX, Mat gradY, int x, int y, int size) {
-        try {
-            double totalMagnitude = 0.0;
-            int count = 0;
-            
-            for (int row = y; row < y + size && row < gradX.rows(); row++) {
-                for (int col = x; col < x + size && col < gradX.cols(); col++) {
-                    double gx = gradX.ptr(row, col).getDouble();
-                    double gy = gradY.ptr(row, col).getDouble();
-                    double magnitude = Math.sqrt(gx * gx + gy * gy);
-                    totalMagnitude += magnitude;
-                    count++;
-                }
-            }
-            
-            return count > 0 ? (totalMagnitude / count) / 255.0 : 0.0;
-            
-        } catch (Exception e) {
-            return 0.0;
-        }
-    }
-    
-    /**
-     * Analyze gradient distribution for biometric signature
-     */
-    private double[] analyzeGradientDistribution(Mat gray) {
-        double[] metrics = new double[32];
-        
-        try {
-            // Calculate gradient histogram
-            Mat gradX = new Mat();
-            Mat gradY = new Mat();
-            opencv_imgproc.Sobel(gray, gradX, opencv_core.CV_64F, 1, 0);
-            opencv_imgproc.Sobel(gray, gradY, opencv_core.CV_64F, 0, 1);
-            
-            // Simplified gradient direction histogram
-            int[] histogram = new int[8]; // 8 direction bins
-            
-            for (int row = 0; row < gray.rows(); row++) {
-                for (int col = 0; col < gray.cols(); col++) {
-                    double gx = gradX.ptr(row, col).getDouble();
-                    double gy = gradY.ptr(row, col).getDouble();
-                    
-                    if (Math.abs(gx) > 10 || Math.abs(gy) > 10) { // Significant gradient
-                        double angle = Math.atan2(gy, gx);
-                        int bin = (int) ((angle + Math.PI) / (2 * Math.PI) * 8) % 8;
-                        histogram[bin]++;
-                    }
-                }
-            }
-            
-            // Normalize histogram
-            int total = 0;
-            for (int count : histogram) total += count;
-            
-            for (int i = 0; i < 8 && i < metrics.length; i++) {
-                metrics[i] = total > 0 ? (double) histogram[i] / total : 0.0;
-            }
-            
-            gradX.release();
-            gradY.release();
-            
-        } catch (Exception e) {
-            logger.warn("Error in gradient distribution analysis", e);
-        }
-        
-        return metrics;
-    }
-    
-    /**
-     * Analyze frequency domain for biometric signature
-     */
-    private double[] analyzeFrequencyDomain(Mat gray) {
-        double[] metrics = new double[32];
-        
-        try {
-            // Simplified frequency analysis using intensity variations
-            
-            // Calculate frequency components in different directions
-            for (int i = 0; i < 16 && i < metrics.length; i++) {
-                double frequency = analyzeDirectionalFrequency(gray, i);
-                metrics[i] = frequency;
-            }
-            
-        } catch (Exception e) {
-            logger.warn("Error in frequency domain analysis", e);
-        }
-        
-        return metrics;
-    }
-    
-    /**
-     * Analyze directional frequency components
-     */
-    private double analyzeDirectionalFrequency(Mat gray, int direction) {
-        try {
-            double totalVariation = 0.0;
-            int count = 0;
-            
-            // Simple directional analysis
-            int step = Math.max(1, direction + 1);
-            
-            for (int row = step; row < gray.rows(); row += step) {
-                for (int col = step; col < gray.cols(); col += step) {
-                    double current = gray.ptr(row, col).getDouble();
-                    double previous = gray.ptr(row - step, col - step).getDouble();
-                    totalVariation += Math.abs(current - previous);
-                    count++;
-                }
-            }
-            
-            return count > 0 ? (totalVariation / count) / 255.0 : 0.0;
-            
-        } catch (Exception e) {
-            return 0.0;
-        }
-    }
-    
-    /**
-     * Calculate ultra-advanced similarity with revolutionary precision
-     */
-    private double calculateUltraAdvancedSimilarity(double[] embedding1, double[] embedding2, double faceQuality) {
-        if (embedding1.length != embedding2.length) {
-            logger.warn("Embedding vectors have different lengths: {} vs {}", 
-                       embedding1.length, embedding2.length);
-            return 0.0;
-        }
-        
-        // Multi-level similarity calculation
-        double cosineSim = calculateCosineSimilarity(embedding1, embedding2);
-        double euclideanSim = calculateEuclideanSimilarity(embedding1, embedding2);
-        double manhattanSim = calculateManhattanSimilarity(embedding1, embedding2);
-        double correlationSim = calculatePearsonCorrelation(embedding1, embedding2);
-        
-        // Advanced weighted combination with quality factor
-        double qualityWeight = Math.max(0.5, Math.min(1.2, faceQuality + 0.3));
-        double ultraSimilarity = (0.35 * cosineSim + 0.25 * euclideanSim + 0.2 * manhattanSim + 0.2 * correlationSim) * qualityWeight;
-        
-        return Math.max(0.0, Math.min(1.0, ultraSimilarity));
-    }
-    
-    /**
-     * Calculate biometric similarity for ultra-precision matching
-     */
-    private double calculateBiometricSimilarity(double[] signature1, double[] signature2) {
-        if (signature1.length != signature2.length) {
-            return 0.0;
-        }
-        
-        double similarity = calculateCosineSimilarity(signature1, signature2);
-        
-        // Boost similarity for biometric matching
-        return Math.max(0.0, Math.min(1.0, similarity * 1.1));
-    }
-    
-    /**
-     * Calculate geometric consistency for advanced validation
-     */
-    private double calculateGeometricConsistency(double[] embedding, double faceQuality) {
-        // Analyze embedding distribution consistency
-        double mean = 0.0;
-        for (double val : embedding) {
-            mean += val;
-        }
-        mean /= embedding.length;
-        
-        double variance = 0.0;
-        for (double val : embedding) {
-            variance += (val - mean) * (val - mean);
-        }
-        variance /= embedding.length;
-        
-        // Consistency score based on variance and quality
-        double consistency = Math.exp(-variance * 10) * faceQuality;
-        return Math.max(0.0, Math.min(1.0, consistency));
-    }
-    
-    /**
-     * Calculate ultra-precision score combining all factors
-     */
-    private double calculateUltraPrecisionScore(double maxSim, double avgSim, double biometricMatch, 
-                                              double geometricConsistency, String personName, double faceQuality) {
-        // Base score with advanced weighting
-        double baseScore = (0.4 * maxSim) + (0.3 * avgSim) + (0.2 * biometricMatch) + (0.1 * geometricConsistency);
-        
-        // Ultra-precision adjustments
-        if (ultraPrecisionEnabled) {
-            // Boost high-quality faces
-            if (faceQuality > 0.8) {
-                baseScore *= 1.08;
-            }
-            
-            // Historical consistency boost
-            Integer recognitionCount = personRecognitionCount.getOrDefault(personName, 0);
-            if (recognitionCount > 10) {
-                Double avgConfidence = personConfidenceHistory.getOrDefault(personName, 0.5);
-                if (avgConfidence > 0.8) {
-                    baseScore *= 1.05; // Consistency bonus
-                }
-            }
-        }
-        
-        return Math.max(0.0, Math.min(1.0, baseScore));
-    }
-    
-    /**
-     * Apply strict mode validation for ultra-accurate recognition
-     */
-    private double applyStrictModeValidation(double score, String personName, double faceQuality) {
-        if (!strictModeEnabled) {
-            return score;
-        }
-        
-        // Strict mode penalties
-        if (faceQuality < 0.6) {
-            score *= 0.9; // Quality penalty
-        }
-        
-        // Require higher consistency for recognition
-        Integer count = personRecognitionCount.getOrDefault(personName, 0);
-        if (count < 3) {
-            score *= 0.95; // New person penalty
-        }
-        
-        return Math.max(0.0, Math.min(1.0, score));
-    }
-    
-    /**
-     * Get ultra-strict threshold based on face quality and settings
-     */
-    private double getUltraStrictThreshold(double faceQuality) {
-        // Relaxed thresholds for practical usage
-        if (strictModeEnabled && ultraPrecisionEnabled) {
-            if (faceQuality >= 0.8) {
-                return Math.max(highQualityThreshold, 0.80);
-            } else if (faceQuality >= 0.6) {
-                return Math.max(mediumQualityThreshold, 0.75);
-            } else if (faceQuality >= 0.4) {
-                return Math.max(lowQualityThreshold, 0.70);
-            } else {
-                return 0.75; // previously 0.90
-            }
-        }
-        return getDynamicThreshold(faceQuality);
-    }
-    
-    /**
-     * Validate ultra-precision match with anti-collision detection
-     */
-    private String validateUltraPrecisionMatch(String matchedPerson, double confidence, double quality, int totalPersons) {
-        // Relax validation; remove harsh single-person clause
-        double requiredConfidence = 0.75 + (0.05 * (1.0 - quality));
-        if (confidence < requiredConfidence) {
-            logger.debug("Validation failed: confidence {} < required {}", String.format("%.3f", confidence), String.format("%.3f", requiredConfidence));
-            return "Unknown";
-        }
-        return matchedPerson;
-    }
-    
-    // Removed unused ultra-advanced statistics update method
-    
-    // Removed unused multi-modal similarity method
-    
-    // Removed unused texture similarity method
-    
-    // Removed unused geometric similarity method
-    
-    // Removed unused feature energy distribution method
-    
-    // Removed unused variance calculation method
-    
-    // Removed unused adaptive weighted similarity method
-    
-    // Removed unused confidence boost method
+
+    /** Public accessor for threshold */
+    public double getRecognitionThreshold() { return recognitionThreshold; }
+
+    /** Public accessor for last confidence */
+    public double getLastRecognitionConfidence() { return lastRecognitionConfidence; }
     
     /**
      * Get dynamic threshold based on face quality
