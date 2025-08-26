@@ -4,6 +4,7 @@ import org.bytedeco.opencv.opencv_core.*;
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
 import org.bytedeco.opencv.global.opencv_imgproc;
 import org.bytedeco.opencv.global.opencv_core;
+import org.bytedeco.opencv.global.opencv_objdetect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,12 +30,12 @@ import java.nio.file.StandardCopyOption;
 public class FaceDetector {
     private static final Logger logger = LoggerFactory.getLogger(FaceDetector.class);
     
-    // Detection parameters - improved for better accuracy
-    private static final double SCALE_FACTOR = 1.05;  // Smaller scale factor for better detection
-    private static final int MIN_NEIGHBORS = 3;       // Reduced for more sensitive detection
-    private static final Size MIN_SIZE = new Size(20, 20);  // Smaller minimum size
-    private static final Size MAX_SIZE = new Size(500, 500); // Larger maximum size
-    private static final int FLAGS = 0;
+    // Detection parameters - optimized for maximum accuracy
+    private static final double SCALE_FACTOR = 1.03;  // Even smaller scale factor for finest detection
+    private static final int MIN_NEIGHBORS = 2;       // Lower for maximum sensitivity
+    private static final Size MIN_SIZE = new Size(15, 15);  // Smaller minimum size to catch distant faces
+    private static final Size MAX_SIZE = new Size(600, 600); // Larger maximum size for close faces
+    private static final int FLAGS = opencv_objdetect.CASCADE_SCALE_IMAGE;
     
     // Haar cascade classifier for face detection
     private CascadeClassifier faceCascade;
