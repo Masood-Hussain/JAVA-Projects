@@ -658,85 +658,99 @@ public class FaceRecognizer {
     public String recognizeFace(Mat faceRegion, DatabaseManager databaseManager) {
         try {
             double[] inputEmbedding = generateFaceEmbedding(faceRegion);
-            List<Map<String, Object>> storedEmbeddings = databaseManager.getAllFaceEmbeddings();
-            if (storedEmbeddings.isEmpty()) {
-                return "Unknown";
+            List<Map<String, Object>> stored = databaseManager.getAllFaceEmbeddings();
+            if (stored.isEmpty()) return "Unknown";
+
+            // Group embeddings per person
+            Map<String, List<double[]>> perPerson = new java.util.HashMap<>();
+            for (Map<String, Object> rec : stored) {
+                String name = (String) rec.get("person_name");
+                double[] emb = (double[]) rec.get("embedding");
+                perPerson.computeIfAbsent(name, k -> new java.util.ArrayList<>()).add(emb);
             }
-            Map<String, List<double[]>> personEmbeddings = new java.util.HashMap<>();
-            for (Map<String, Object> record : storedEmbeddings) {
-                String personName = (String) record.get("person_name");
-                double[] storedEmbedding = (double[]) record.get("embedding");
-                personEmbeddings.computeIfAbsent(personName, k -> new java.util.ArrayList<>()).add(storedEmbedding);
-            }
-            String bestMatch = "Unknown";
-            double bestSimilarity = 0.0;
-            double faceQuality = faceQualityCheckEnabled ? assessFaceQuality(faceRegion) : 0.6; // default moderate quality
-            double[] biometricSignature = (biometricAnalysisEnabled ? generateBiometricSignature(faceRegion) : null);
-            for (Map.Entry<String, List<double[]>> entry : personEmbeddings.entrySet()) {
-                String personName = entry.getKey();
-                List<double[]> embeddings = entry.getValue();
-                double maxSimilarity = 0.0;
-                double avgSimilarity = 0.0;
-                int valid = 0;
-                for (double[] storedEmbedding : embeddings) {
-                    double sim = calculateUltraAdvancedSimilarity(inputEmbedding, storedEmbedding, faceQuality);
-                    maxSimilarity = Math.max(maxSimilarity, sim);
-                    avgSimilarity += sim;
-                    valid++;
+
+            int totalPersons = perPerson.size();
+            double faceQuality = faceQualityCheckEnabled ? assessFaceQuality(faceRegion) : 0.6;
+
+            String bestName = "Unknown";
+            double bestScore = 0.0;
+            double bestMax = 0.0;
+            double bestAvg = 0.0;
+            double bestCentroidSim = 0.0;
+            String secondName = "Unknown";
+            double secondScore = 0.0;
+
+            for (Map.Entry<String, List<double[]>> entry : perPerson.entrySet()) {
+                String name = entry.getKey();
+                List<double[]> embs = entry.getValue();
+                if (embs.isEmpty()) continue;
+
+                double maxSim = 0.0;
+                double sumSim = 0.0;
+                for (double[] e : embs) {
+                    double sim = calculateHybridSimilarity(inputEmbedding, e); // simpler & more stable
+                    maxSim = Math.max(maxSim, sim);
+                    sumSim += sim;
                 }
-                if (valid == 0) continue;
-                avgSimilarity /= valid;
-                double biometricMatch = 1.0;
-                if (biometricAnalysisEnabled && biometricSignature != null) {
-                    double[] storedBio = personBiometricSignature.get(personName);
-                    if (storedBio != null) {
-                        biometricMatch = calculateBiometricSimilarity(biometricSignature, storedBio);
-                    } else {
-                        personBiometricSignature.put(personName, biometricSignature.clone());
+                double avgSim = sumSim / embs.size();
+
+                // Compute centroid similarity
+                double[] centroid = new double[inputEmbedding.length];
+                for (double[] e : embs) {
+                    for (int i = 0; i < centroid.length && i < e.length; i++) centroid[i] += e[i];
+                }
+                for (int i = 0; i < centroid.length; i++) centroid[i] /= embs.size();
+                double centroidSim = calculateCosineSimilarity(inputEmbedding, centroid);
+
+                // Consistency gating: require embedding to be consistently close to all stored samples
+                boolean passes = maxSim >= recognitionThreshold &&
+                                 avgSim >= (recognitionThreshold - 0.05) &&
+                                 centroidSim >= (recognitionThreshold - 0.03);
+
+                if (!passes) continue; // treat as not recognized
+
+                // Combined score emphasizes consistent average & centroid alignment
+                double combinedScore = (0.5 * maxSim) + (0.3 * avgSim) + (0.2 * centroidSim);
+
+                if (combinedScore > bestScore) {
+                    // shift best to second if different
+                    if (!bestName.equals("Unknown") && !bestName.equals(name) && bestScore > secondScore) {
+                        secondScore = bestScore;
+                        secondName = bestName;
                     }
-                }
-                double geometricConsistency = calculateGeometricConsistency(inputEmbedding, faceQuality);
-                double score = calculateUltraPrecisionScore(maxSimilarity, avgSimilarity, biometricMatch, geometricConsistency, personName, faceQuality);
-                if (strictModeEnabled) {
-                    score = applyStrictModeValidation(score, personName, faceQuality);
-                }
-                double dynamicThreshold = getDynamicThreshold(faceQuality); // base threshold
-                // Soften ultra strict threshold usage: take min of ultraStrict and base threshold + 0.05
-                double ultraStrictThreshold = Math.min(getUltraStrictThreshold(faceQuality), dynamicThreshold + 0.05);
-                if (score > bestSimilarity && score >= ultraStrictThreshold) {
-                    bestSimilarity = score;
-                    bestMatch = personName;
+                    bestScore = combinedScore;
+                    bestName = name;
+                    bestMax = maxSim;
+                    bestAvg = avgSim;
+                    bestCentroidSim = centroidSim;
+                } else if (!bestName.equals(name) && combinedScore > secondScore) {
+                    secondScore = combinedScore;
+                    secondName = name;
                 }
             }
-            // Fallback path: if nothing passes high threshold, try simple cosine similarity to best single embedding
-            if (bestMatch.equals("Unknown")) {
-                double fallbackBest = 0.0;
-                String fallbackPerson = "Unknown";
-                for (Map.Entry<String, List<double[]>> entry : personEmbeddings.entrySet()) {
-                    for (double[] emb : entry.getValue()) {
-                        double cos = calculateCosineSimilarity(inputEmbedding, emb);
-                        if (cos > fallbackBest) {
-                            fallbackBest = cos;
-                            fallbackPerson = entry.getKey();
-                        }
-                    }
-                }
-                // Accept fallback if above (recognition.threshold - 0.1)
-                double baseThreshold = recognitionThreshold;
-                if (fallbackBest >= (baseThreshold - 0.10)) {
-                    bestMatch = fallbackPerson;
-                    bestSimilarity = fallbackBest;
+
+            // Special handling when only one person enrolled: be stricter to avoid false positives
+            if (totalPersons == 1 && !bestName.equals("Unknown")) {
+                // Require very small gap between max and avg (high intra-person consistency)
+                if ((bestMax - bestAvg) > 0.05 || bestCentroidSim < recognitionThreshold) {
+                    return "Unknown";
                 }
             }
-            if (!bestMatch.equals("Unknown")) {
-                logger.info("RECOGNITION: {} (confidence: {} )", bestMatch, String.format("%.3f", bestSimilarity));
-                lastRecognitionConfidence = bestSimilarity;
-            } else {
-                lastRecognitionConfidence = bestSimilarity;
+
+            // Disambiguation: ensure sufficient margin over second best (if there is another person)
+            if (!bestName.equals("Unknown") && !secondName.equals("Unknown")) {
+                if ((bestScore - secondScore) < 0.07) {
+                    return "Unknown"; // ambiguous
+                }
             }
-            return bestMatch;
-        } catch (Exception e) {
-            logger.error("Error during face recognition: ", e);
+
+            if (!bestName.equals("Unknown")) {
+                lastRecognitionConfidence = bestScore;
+                return bestName;
+            }
+            return "Unknown";
+        } catch (Exception ex) {
+            logger.error("Error during face recognition", ex);
             return "Unknown";
         }
     }
@@ -865,13 +879,22 @@ public class FaceRecognizer {
         for (int i = 0; i < embedding1.length; i++) {
             // Weight heuristic based on absolute value (proxy for variance / importance)
             double weight = 1.0 + Math.min(0.5, Math.abs(embedding1[i]));
-            double v1 = embedding1[i] * weight;
+                // Accept fallback only if sufficiently close to base threshold (tighter than before)
             double v2 = embedding2[i] * weight;
-            dotProduct += v1 * v2;
+                if (fallbackBest >= (baseThreshold - 0.02)) {
             norm1 += v1 * v1;
             norm2 += v2 * v2;
         }
         if (norm1 < 1e-9 || norm2 < 1e-9) return 0.0;
+            // Disambiguation: require separation from second-best different-person match
+            double disambiguationMargin = 0.05; // require at least 0.05 gap
+            if (!bestMatch.equals("Unknown") && !secondBestMatch.equals("Unknown") &&
+                (bestSimilarity - secondBestSimilarity) < disambiguationMargin) {
+                logger.debug("Ambiguous match: best={} ({}) second={} ({}). Marking as Unknown.",
+                        bestMatch, String.format("%.3f", bestSimilarity),
+                        secondBestMatch, String.format("%.3f", secondBestSimilarity));
+                return "Unknown";
+            }
         double cosine = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
         return Math.max(0.0, Math.min(1.0, cosine));
     }
