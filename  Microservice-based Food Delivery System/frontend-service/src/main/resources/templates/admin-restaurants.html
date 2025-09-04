@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Restaurants - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">🍕 Food Delivery System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/restaurants">Restaurants</a>
+                <a class="nav-link" href="/orders">My Orders</a>
+                <a class="nav-link active" href="/admin">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1>Manage Restaurants</h1>
+                    <a href="/admin" class="btn btn-outline-secondary">Back to Admin</a>
+                </div>
+                
+                <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+                <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+                
+                <!-- Add New Restaurant Form -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-plus-circle"></i> Add New Restaurant
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/admin/restaurants}" th:object="${newRestaurant}" method="post" class="needs-validation" novalidate>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="name" class="form-label">Restaurant Name *</label>
+                                    <input type="text" class="form-control" id="name" th:field="*{name}" required>
+                                    <div class="form-text">Enter a unique restaurant name</div>
+                                    <div class="invalid-feedback">Please provide a restaurant name.</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="cuisine" class="form-label">Cuisine Type *</label>
+                                    <input type="text" class="form-control" id="cuisine" th:field="*{cuisine}" required>
+                                    <div class="form-text">e.g., Italian, Chinese, Indian, Mexican</div>
+                                    <div class="invalid-feedback">Please provide a cuisine type.</div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="address" class="form-label">Address *</label>
+                                    <input type="text" class="form-control" id="address" th:field="*{address}" required>
+                                    <div class="form-text">Full restaurant address</div>
+                                    <div class="invalid-feedback">Please provide an address.</div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="phone" class="form-label">Phone Number *</label>
+                                    <input type="tel" class="form-control" id="phone" th:field="*{phone}" required>
+                                    <div class="form-text">Contact phone number</div>
+                                    <div class="invalid-feedback">Please provide a phone number.</div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12 mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" th:field="*{description}" 
+                                              rows="2" placeholder="Optional description about the restaurant"></textarea>
+                                </div>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-plus-circle"></i> Add Restaurant
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Restaurant List -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-shop"></i> Restaurant Management
+                            <span class="badge bg-light text-dark ms-2" th:text="${restaurants != null ? #lists.size(restaurants) : 0}">0</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div th:if="${restaurants != null and not #lists.isEmpty(restaurants)}">
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="searchRestaurants" 
+                                       placeholder="🔍 Search restaurants by name, cuisine, or address...">
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover" id="restaurantsTable">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Cuisine</th>
+                                            <th>Address</th>
+                                            <th>Phone</th>
+                                            <th>Status</th>
+                                            <th width="200">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr th:each="restaurant : ${restaurants}" class="restaurant-row">
+                                            <td th:text="${restaurant.id}" class="text-muted">1</td>
+                                            <td>
+                                                <strong th:text="${restaurant.name}">Restaurant Name</strong>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info" th:text="${restaurant.cuisine}">Cuisine</span>
+                                            </td>
+                                            <td th:text="${restaurant.address}" class="text-muted">Address</td>
+                                            <td th:text="${restaurant.phone}">Phone</td>
+                                            <td>
+                                                <span class="badge bg-success">Active</span>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a th:href="@{'/admin/restaurants/' + ${restaurant.id} + '/menu'}" 
+                                                       class="btn btn-primary btn-sm" title="Manage Menu">
+                                                        <i class="bi bi-list-ul"></i>
+                                                    </a>
+                                                    <a th:href="@{'/admin/restaurants/' + ${restaurant.id} + '/edit'}" 
+                                                       class="btn btn-outline-warning btn-sm" title="Edit Restaurant">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </a>
+                                                    <button class="btn btn-outline-danger btn-sm" 
+                                                            th:onclick="'deleteRestaurant(' + ${restaurant.id} + ', \'' + ${restaurant.name} + '\')'",
+                                                            title="Delete Restaurant">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div th:if="${restaurants == null or #lists.isEmpty(restaurants)}" class="text-center py-5">
+                            <i class="bi bi-shop display-1 text-muted"></i>
+                            <h4 class="text-muted mt-3">No Restaurants Found</h4>
+                            <p class="text-muted">Get started by adding your first restaurant above!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function deleteRestaurant(id, name) {
+            if (confirm('Are you sure you want to delete "' + name + '"? This action cannot be undone and will also delete all menu items.')) {
+                // Show loading state
+                const deleteBtn = event.target.closest('button');
+                const originalContent = deleteBtn.innerHTML;
+                deleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                deleteBtn.disabled = true;
+                
+                fetch('/admin/restaurants/' + id, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.text())
+                .then(data => {
+                    if (data === 'success') {
+                        // Show success message and reload page
+                        showNotification('Restaurant "' + name + '" deleted successfully!', 'success');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        // Show error message
+                        showNotification('Failed to delete restaurant: ' + data, 'danger');
+                        deleteBtn.innerHTML = originalContent;
+                        deleteBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('An error occurred while deleting the restaurant.', 'danger');
+                    deleteBtn.innerHTML = originalContent;
+                    deleteBtn.disabled = false;
+                });
+            }
+        }
+
+        function showNotification(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchRestaurants');
+            const tableRows = document.querySelectorAll('.restaurant-row');
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    
+                    tableRows.forEach(row => {
+                        const text = row.textContent.toLowerCase();
+                        if (text.includes(searchTerm)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+                });
+            }
+
+            // Auto-hide alerts after 5 seconds
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(function(alert) {
+                setTimeout(function() {
+                    alert.style.transition = 'opacity 0.5s';
+                    alert.style.opacity = '0';
+                    setTimeout(function() {
+                        if (alert.parentNode) {
+                            alert.remove();
+                        }
+                    }, 500);
+                }, 5000);
+            });
+
+            // Form validation
+            const forms = document.querySelectorAll('.needs-validation');
+            Array.from(forms).forEach(form => {
+                form.addEventListener('submit', event => {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        });
+    </script>
+</body>
+</html>
