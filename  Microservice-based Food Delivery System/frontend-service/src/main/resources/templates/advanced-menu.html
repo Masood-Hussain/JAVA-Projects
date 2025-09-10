@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Smart Menu Explorer</title>
+    
+    <!-- Modern CSS Framework -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        .menu-card {
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        .menu-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .search-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .filter-chip {
+            transition: all 0.2s ease;
+        }
+        .filter-chip:hover {
+            transform: scale(1.05);
+        }
+        .ai-recommendation {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+        }
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg fixed w-full top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-gray-800">
+                        <i class="fas fa-utensils text-purple-600"></i>
+                        FoodieAI 2025
+                    </h1>
+                </div>
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="/restaurants" class="text-gray-700 hover:text-purple-600">Restaurants</a>
+                    <a href="/orders" class="text-gray-700 hover:text-purple-600">Orders</a>
+                    <a href="/profile" class="text-gray-700 hover:text-purple-600">Profile</a>
+                    <div class="relative">
+                        <i class="fas fa-shopping-cart text-gray-700 text-xl cursor-pointer"></i>
+                        <span class="cart-count absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="pt-20">
+        <!-- Search and Filters -->
+        <section class="search-container text-white py-8">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">Discover Amazing Food</h2>
+                    <p class="text-lg opacity-90">AI-powered recommendations just for you</p>
+                </div>
+                
+                <!-- Advanced Search -->
+                <div class="max-w-4xl mx-auto">
+                    <div class="bg-white bg-opacity-20 backdrop-filter backdrop-blur-lg rounded-2xl p-6">
+                        <div class="flex flex-col md:flex-row gap-4 mb-4">
+                            <div class="flex-1 relative">
+                                <i class="fas fa-search absolute left-3 top-3 text-white opacity-70"></i>
+                                <input id="searchInput" type="text" placeholder="Search for dishes, cuisines, ingredients..." 
+                                       class="w-full pl-10 pr-4 py-3 bg-white bg-opacity-20 border border-white border-opacity-30 rounded-lg text-white placeholder-white placeholder-opacity-70 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50">
+                            </div>
+                            <button id="voiceSearch" class="px-6 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all">
+                                <i class="fas fa-microphone text-white"></i>
+                            </button>
+                            <button id="cameraSearch" class="px-6 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all">
+                                <i class="fas fa-camera text-white"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Filter Chips -->
+                        <div class="flex flex-wrap gap-2">
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="vegetarian">
+                                <i class="fas fa-leaf text-green-300"></i> Vegetarian
+                            </div>
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="vegan">
+                                <i class="fas fa-seedling text-green-300"></i> Vegan
+                            </div>
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="gluten-free">
+                                <i class="fas fa-wheat text-yellow-300"></i> Gluten-Free
+                            </div>
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="spicy">
+                                <i class="fas fa-pepper-hot text-red-300"></i> Spicy
+                            </div>
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="low-calorie">
+                                <i class="fas fa-heart text-pink-300"></i> Low Calorie
+                            </div>
+                            <div class="filter-chip bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-full cursor-pointer" data-filter="quick">
+                                <i class="fas fa-clock text-blue-300"></i> Quick (< 15min)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI Recommendations -->
+        <section class="py-8">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="ai-recommendation rounded-2xl p-6 mb-8">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-2xl font-bold text-gray-800">
+                            <i class="fas fa-robot text-purple-600"></i>
+                            AI Recommendations For You
+                        </h3>
+                        <button id="refreshRecommendations" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="aiRecommendations" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- AI recommendations will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Menu Categories -->
+        <section class="py-8">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex flex-wrap gap-4 mb-8">
+                    <button class="category-btn active px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all" data-category="all">
+                        All Items
+                    </button>
+                    <button class="category-btn px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all" data-category="appetizers">
+                        Appetizers
+                    </button>
+                    <button class="category-btn px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all" data-category="main">
+                        Main Course
+                    </button>
+                    <button class="category-btn px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all" data-category="desserts">
+                        Desserts
+                    </button>
+                    <button class="category-btn px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all" data-category="beverages">
+                        Beverages
+                    </button>
+                </div>
+
+                <!-- Menu Items Grid -->
+                <div id="menuItems" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Menu items will be loaded here -->
+                </div>
+
+                <!-- Loading Skeleton -->
+                <div id="loadingSkeleton" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+                    <div class="loading-shimmer bg-white rounded-lg p-6 h-64"></div>
+                    <div class="loading-shimmer bg-white rounded-lg p-6 h-64"></div>
+                    <div class="loading-shimmer bg-white rounded-lg p-6 h-64"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Smart Combo Suggestions -->
+        <section class="py-8 bg-gray-100">
+            <div class="max-w-7xl mx-auto px-4">
+                <h3 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-lightbulb text-yellow-500"></i>
+                    Smart Combo Suggestions
+                </h3>
+                <div id="smartCombos" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Smart combos will be loaded here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Real-time Notifications -->
+    <div id="notifications" class="fixed top-20 right-4 z-50 space-y-2">
+        <!-- Notifications will appear here -->
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.js"></script>
+    <script th:inline="javascript">
+        const API_URL = /*[[${apiUrl}]]*/ 'http://localhost:8080';
+        const RESTAURANT_ID = /*[[${restaurantId}]]*/ 1;
+        
+        // Advanced Menu Management System
+        class AdvancedMenuSystem {
+            constructor() {
+                this.currentFilters = {};
+                this.currentCategory = 'all';
+                this.cart = JSON.parse(localStorage.getItem('cart') || '[]');
+                this.initializeEventListeners();
+                this.initializeWebSocket();
+                this.loadInitialData();
+            }
+            
+            initializeEventListeners() {
+                // Search functionality
+                document.getElementById('searchInput').addEventListener('input', 
+                    this.debounce(this.handleSearch.bind(this), 300));
+                
+                // Voice search
+                document.getElementById('voiceSearch').addEventListener('click', this.handleVoiceSearch.bind(this));
+                
+                // Camera search
+                document.getElementById('cameraSearch').addEventListener('click', this.handleCameraSearch.bind(this));
+                
+                // Filter chips
+                document.querySelectorAll('.filter-chip').forEach(chip => {
+                    chip.addEventListener('click', this.handleFilterToggle.bind(this));
+                });
+                
+                // Category buttons
+                document.querySelectorAll('.category-btn').forEach(btn => {
+                    btn.addEventListener('click', this.handleCategoryChange.bind(this));
+                });
+                
+                // Refresh recommendations
+                document.getElementById('refreshRecommendations').addEventListener('click', this.loadAIRecommendations.bind(this));
+            }
+            
+            initializeWebSocket() {
+                // Connect to real-time updates
+                this.socket = io(`${API_URL}/ws`);
+                
+                this.socket.on('menuUpdate', (data) => {
+                    this.handleRealTimeMenuUpdate(data);
+                });
+                
+                this.socket.on('availabilityUpdate', (data) => {
+                    this.handleAvailabilityUpdate(data);
+                });
+            }
+            
+            async loadInitialData() {
+                this.showLoading();
+                try {
+                    await Promise.all([
+                        this.loadMenuItems(),
+                        this.loadAIRecommendations(),
+                        this.loadSmartCombos()
+                    ]);
+                } catch (error) {
+                    this.showError('Failed to load menu data');
+                } finally {
+                    this.hideLoading();
+                }
+            }
+            
+            async loadMenuItems(searchCriteria = {}) {
+                try {
+                    const response = await fetch(`${API_URL}/api/v2/restaurants/${RESTAURANT_ID}/menu/search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...searchCriteria,
+                            categories: this.currentCategory !== 'all' ? [this.currentCategory] : null,
+                            ...this.currentFilters
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error('Failed to load menu items');
+                    
+                    const menuItems = await response.json();
+                    this.renderMenuItems(menuItems);
+                } catch (error) {
+                    console.error('Error loading menu items:', error);
+                    this.showError('Failed to load menu items');
+                }
+            }
+            
+            async loadAIRecommendations() {
+                try {
+                    const userId = this.getUserId(); // Get from session/auth
+                    const response = await fetch(`${API_URL}/api/v2/restaurants/${RESTAURANT_ID}/menu/recommendations?userId=${userId}`);
+                    
+                    if (!response.ok) throw new Error('Failed to load recommendations');
+                    
+                    const recommendations = await response.json();
+                    this.renderAIRecommendations(recommendations);
+                } catch (error) {
+                    console.error('Error loading AI recommendations:', error);
+                }
+            }
+            
+            async loadSmartCombos() {
+                try {
+                    const response = await fetch(`${API_URL}/api/v2/restaurants/${RESTAURANT_ID}/menu/combos`);
+                    
+                    if (!response.ok) throw new Error('Failed to load smart combos');
+                    
+                    const combos = await response.json();
+                    this.renderSmartCombos(combos);
+                } catch (error) {
+                    console.error('Error loading smart combos:', error);
+                }
+            }
+            
+            renderMenuItems(items) {
+                const container = document.getElementById('menuItems');
+                container.innerHTML = items.map(item => this.createMenuItemCard(item)).join('');
+            }
+            
+            renderAIRecommendations(recommendations) {
+                const container = document.getElementById('aiRecommendations');
+                container.innerHTML = recommendations.slice(0, 3).map(rec => this.createRecommendationCard(rec)).join('');
+            }
+            
+            renderSmartCombos(combos) {
+                const container = document.getElementById('smartCombos');
+                container.innerHTML = combos.slice(0, 2).map(combo => this.createComboCard(combo)).join('');
+            }
+            
+            createMenuItemCard(item) {
+                const isInCart = this.cart.some(cartItem => cartItem.id === item.id);
+                const tags = [];
+                
+                if (item.vegetarian) tags.push('<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Vegetarian</span>');
+                if (item.vegan) tags.push('<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Vegan</span>');
+                if (item.glutenFree) tags.push('<span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">Gluten-Free</span>');
+                if (item.spiceLevel) tags.push(`<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">${item.spiceLevel}</span>`);
+                
+                return `
+                    <div class="menu-card bg-white rounded-lg shadow-md overflow-hidden">
+                        <div class="relative">
+                            <img src="${item.imageUrl || '/images/default-food.jpg'}" alt="${item.name}" class="w-full h-48 object-cover">
+                            ${!item.available ? '<div class="absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center"><span class="text-white font-semibold">Currently Unavailable</span></div>' : ''}
+                            <div class="absolute top-2 right-2">
+                                <span class="bg-purple-600 text-white px-2 py-1 rounded text-sm font-semibold">$${item.price}</span>
+                            </div>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800">${item.name}</h3>
+                                <div class="flex items-center text-yellow-500">
+                                    <i class="fas fa-star"></i>
+                                    <span class="ml-1 text-sm text-gray-600">${item.rating || 'New'}</span>
+                                </div>
+                            </div>
+                            <p class="text-gray-600 text-sm mb-3">${item.description}</p>
+                            <div class="flex flex-wrap gap-1 mb-3">
+                                ${tags.join('')}
+                            </div>
+                            <div class="flex justify-between items-center text-sm text-gray-500 mb-3">
+                                <span><i class="fas fa-clock"></i> ${item.preparationTime || 'N/A'} min</span>
+                                <span><i class="fas fa-fire"></i> ${item.calories || 'N/A'} cal</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="menuSystem.addToCart(${item.id})" 
+                                        class="flex-1 ${isInCart ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700'} text-white py-2 px-4 rounded transition-all ${!item.available ? 'opacity-50 cursor-not-allowed' : ''}"
+                                        ${!item.available ? 'disabled' : ''}>
+                                    <i class="fas ${isInCart ? 'fa-check' : 'fa-plus'}"></i>
+                                    ${isInCart ? 'Added' : 'Add to Cart'}
+                                </button>
+                                <button onclick="menuSystem.showItemDetails(${item.id})" class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-3 rounded transition-all">
+                                    <i class="fas fa-info"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Additional methods for handling search, filters, cart, etc.
+            handleSearch(event) {
+                const searchTerm = event.target.value;
+                this.loadMenuItems({ searchTerm });
+            }
+            
+            handleFilterToggle(event) {
+                const filter = event.target.dataset.filter;
+                const isActive = event.target.classList.contains('bg-opacity-30');
+                
+                if (isActive) {
+                    delete this.currentFilters[filter];
+                    event.target.classList.remove('bg-opacity-30');
+                } else {
+                    this.currentFilters[filter] = true;
+                    event.target.classList.add('bg-opacity-30');
+                }
+                
+                this.loadMenuItems();
+            }
+            
+            addToCart(itemId) {
+                // Implementation for adding items to cart
+                console.log('Adding item to cart:', itemId);
+                this.updateCartUI();
+            }
+            
+            updateCartUI() {
+                const cartCount = document.querySelector('.cart-count');
+                cartCount.textContent = this.cart.length;
+            }
+            
+            showLoading() {
+                document.getElementById('loadingSkeleton').classList.remove('hidden');
+                document.getElementById('menuItems').classList.add('hidden');
+            }
+            
+            hideLoading() {
+                document.getElementById('loadingSkeleton').classList.add('hidden');
+                document.getElementById('menuItems').classList.remove('hidden');
+            }
+            
+            showError(message) {
+                this.showNotification(message, 'error');
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `p-4 rounded-lg shadow-lg ${type === 'error' ? 'bg-red-500' : 'bg-blue-500'} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span>${message}</span>
+                        <button onclick="this.parentElement.parentElement.remove()" class="ml-4">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                
+                document.getElementById('notifications').appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 5000);
+            }
+            
+            debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            getUserId() {
+                return 'user123'; // In real app, get from authentication
+            }
+        }
+        
+        // Initialize the system when DOM is loaded
+        let menuSystem;
+        document.addEventListener('DOMContentLoaded', () => {
+            menuSystem = new AdvancedMenuSystem();
+        });
+    </script>
+</body>
+</html>
