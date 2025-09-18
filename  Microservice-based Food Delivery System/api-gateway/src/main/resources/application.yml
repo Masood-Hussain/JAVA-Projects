@@ -1,0 +1,226 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Restaurant Service Routes
+        - id: restaurant-service
+          uri: lb://restaurant-service
+          predicates:
+            - Path=/api/v*/restaurants/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: restaurant-circuit-breaker
+                fallbackUri: forward:/fallback/restaurant
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                methods: GET,POST
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+
+        # Order Service Routes
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v*/orders/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: order-circuit-breaker
+                fallbackUri: forward:/fallback/order
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+
+        # Payment Service Routes
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v*/payments/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: payment-circuit-breaker
+                fallbackUri: forward:/fallback/payment
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenish-rate: 50
+                redis-rate-limiter.burst-capacity: 100
+
+        # Delivery Service Routes
+        - id: delivery-service
+          uri: lb://delivery-service
+          predicates:
+            - Path=/api/v*/delivery/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: delivery-circuit-breaker
+                fallbackUri: forward:/fallback/delivery
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+
+        # WebSocket Routes for Real-time Features
+        - id: websocket-route
+          uri: lb://delivery-service
+          predicates:
+            - Path=/ws/**
+          filters:
+            - name: PreserveHostHeader
+
+        # AI/ML Service Routes
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v*/ai/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: ai-circuit-breaker
+                fallbackUri: forward:/fallback/ai
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter.replenish-rate: 20
+                redis-rate-limiter.burst-capacity: 40
+
+      # Global filters
+      default-filters:
+        - name: GlobalLoggingFilter
+        - name: CorrelationIdFilter
+        - name: ResponseTimeFilter
+        - name: SecurityHeadersFilter
+
+      # Discovery client configuration
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+  # Security configuration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: https://your-auth-server/.well-known/jwks.json
+          issuer-uri: https://your-auth-server
+
+  # Redis configuration for rate limiting and caching
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+# Circuit breaker configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      restaurant-circuit-breaker:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+      order-circuit-breaker:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+      payment-circuit-breaker:
+        failure-rate-threshold: 30  # More sensitive for payments
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+      delivery-circuit-breaker:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+      ai-circuit-breaker:
+        failure-rate-threshold: 60  # More tolerant for AI services
+        wait-duration-in-open-state: 45s
+        permitted-number-of-calls-in-half-open-state: 5
+        sliding-window-size: 15
+        minimum-number-of-calls: 8
+
+  # Timeout configuration
+  timelimiter:
+    instances:
+      default:
+        timeout-duration: 10s
+
+# Monitoring and observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        resilience4j.circuitbreaker.calls: true
+
+# Logging configuration
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG
+    org.springframework.security: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{traceId},%X{spanId}] %logger{36} - %msg%n"
+
+# Custom gateway configuration
+gateway:
+  rate-limiting:
+    default-requests-per-minute: 100
+    premium-requests-per-minute: 500
+    admin-requests-per-minute: 1000
+  
+  security:
+    cors:
+      allowed-origins: "*"
+      allowed-methods: "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+      allowed-headers: "*"
+      allow-credentials: true
+    
+    rate-limit-by-user: true
+    rate-limit-by-ip: true
+    
+  monitoring:
+    request-logging: true
+    response-time-logging: true
+    error-tracking: true
