@@ -13,8 +13,11 @@ import java.util.Optional;
 @Service
 public class DeliveryService {
 
-    @Autowired
-    private DeliveryRepository deliveryRepository;
+    private final DeliveryRepository deliveryRepository;
+
+    public DeliveryService(DeliveryRepository deliveryRepository) {
+        this.deliveryRepository = deliveryRepository;
+    }
 
     public DeliveryDto createDelivery(DeliveryDto deliveryDto) {
         Delivery delivery = new Delivery(
@@ -35,6 +38,17 @@ public class DeliveryService {
     public Optional<DeliveryDto> getDeliveryByOrderId(Long orderId) {
         return deliveryRepository.findByOrderId(orderId)
             .map(this::convertToDto);
+    }
+
+    public Optional<DeliveryDto> getDeliveryById(Long deliveryId) {
+        return deliveryRepository.findById(deliveryId)
+            .map(this::convertToDto);
+    }
+
+    public List<DeliveryDto> getDeliveriesByDeliveryPersonId(Long deliveryPersonId) {
+        return deliveryRepository.findByDeliveryPersonId(deliveryPersonId).stream()
+            .map(this::convertToDto)
+            .toList();
     }
 
     public DeliveryDto updateDeliveryStatus(Long deliveryId, DeliveryStatus status) {
