@@ -1,6 +1,107 @@
 version: '3.8'
 
 services:
+  # Infrastructure Services
+  
+  # Redis for caching and real-time features
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - food-delivery-network
+
+  # Kafka for event streaming
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - food-delivery-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - food-delivery-network
+
+  # Elasticsearch for search and analytics
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - food-delivery-network
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - food-delivery-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:10.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - food-delivery-network
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - food-delivery-network
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: fooddelivery
+      MYSQL_USER: fooduser
+      MYSQL_PASSWORD: foodpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - food-delivery-network
+
+  # Microservices
+  
   # Service Discovery (Eureka Server)
   service-discovery:
     build:
@@ -10,10 +111,16 @@ services:
       - "8761:8761"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - redis
+      - kafka
+      - mysql
     networks:
       - food-delivery-network
 
-  # API Gateway
+  # API Gateway with advanced features
   api-gateway:
     build:
       context: ./api-gateway
@@ -22,13 +129,18 @@ services:
       - "8080:8080"
     depends_on:
       - service-discovery
+      - redis
+      - jaeger
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - SPRING_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     networks:
       - food-delivery-network
 
-  # Restaurant Service
+  # Restaurant Service with AI capabilities
   restaurant-service:
     build:
       context: ./restaurant-service
@@ -37,17 +149,112 @@ services:
       - "8081:8081"
     depends_on:
       - service-discovery
+      - mysql
+      - redis
+      - elasticsearch
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fooddelivery
+      - SPRING_DATASOURCE_USERNAME=fooduser
+      - SPRING_DATASOURCE_PASSWORD=foodpassword
+      - SPRING_REDIS_HOST=redis
+      - SPRING_ELASTICSEARCH_URIS=http://elasticsearch:9200
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     networks:
       - food-delivery-network
 
-  # Order Service
+  # Order Service with event sourcing
   order-service:
     build:
       context: ./order-service
       dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      - service-discovery
+      - mysql
+      - kafka
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fooddelivery
+      - SPRING_DATASOURCE_USERNAME=fooduser
+      - SPRING_DATASOURCE_PASSWORD=foodpassword
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    networks:
+      - food-delivery-network
+
+  # Payment Service with fraud detection
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    depends_on:
+      - service-discovery
+      - mysql
+      - redis
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fooddelivery
+      - SPRING_DATASOURCE_USERNAME=fooduser
+      - SPRING_DATASOURCE_PASSWORD=foodpassword
+      - SPRING_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    networks:
+      - food-delivery-network
+
+  # Delivery Service with real-time tracking
+  delivery-service:
+    build:
+      context: ./delivery-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    depends_on:
+      - service-discovery
+      - mysql
+      - redis
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/fooddelivery
+      - SPRING_DATASOURCE_USERNAME=fooduser
+      - SPRING_DATASOURCE_PASSWORD=foodpassword
+      - SPRING_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    networks:
+      - food-delivery-network
+
+  # Frontend Service
+  frontend-service:
+    build:
+      context: ./frontend-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    depends_on:
+      - api-gateway
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - API_GATEWAY_URL=http://api-gateway:8080
+    networks:
+      - food-delivery-network
+
+# Volumes for data persistence
+volumes:
+  redis-data:
+  mysql-data:
+  elasticsearch-data:
+  grafana-data:
+
+# Network configuration
+networks:
+  food-delivery-network:
+    driver: bridge
     ports:
       - "8082:8082"
     depends_on:
