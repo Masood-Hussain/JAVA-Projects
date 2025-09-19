@@ -12,7 +12,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.1.0</version>
+        <version>3.3.3</version>
         <relativePath/>
     </parent>
 
@@ -31,14 +31,23 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
-        <spring-boot.version>3.2.0</spring-boot.version>
+        <spring-boot.version>3.3.3</spring-boot.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <reactor.version>3.6.0</reactor.version>
-        <redis.version>3.2.0</redis.version>
-        <websocket.version>3.2.0</websocket.version>
-        <ai.version>1.0.0</ai.version>
-        <blockchain.version>2.0.0</blockchain.version>
+        <redis.version>3.3.3</redis.version>
+        <websocket.version>3.3.3</websocket.version>
+        <ai.version>1.0.0-M2</ai.version>
+        <blockchain.version>4.11.3</blockchain.version>
         <quantum.version>1.0.0</quantum.version>
+        <kafka.version>3.6.0</kafka.version>
+        <elasticsearch.version>8.11.0</elasticsearch.version>
+        <prometheus.version>1.12.4</prometheus.version>
+        <jaeger.version>1.50.0</jaeger.version>
+        <graphql.version>20.8</graphql.version>
+        <jwt.version>4.4.0</jwt.version>
+        <stripe.version>24.12.0</stripe.version>
+        <paypal.version>2.28.2</paypal.version>
+        <ml.version>2.3.0</ml.version>
     </properties>
 
     <dependencyManagement>
@@ -75,8 +84,62 @@
             <!-- AI and Machine Learning -->
             <dependency>
                 <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-core</artifactId>
+                <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
                 <version>${ai.version}</version>
+            </dependency>
+            
+            <!-- Kafka for Event Streaming -->
+            <dependency>
+                <groupId>org.springframework.kafka</groupId>
+                <artifactId>spring-kafka</artifactId>
+                <version>${kafka.version}</version>
+            </dependency>
+            
+            <!-- Elasticsearch for Search and Analytics -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            
+            <!-- Payment Processing -->
+            <dependency>
+                <groupId>com.stripe</groupId>
+                <artifactId>stripe-java</artifactId>
+                <version>${stripe.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>com.paypal.sdk</groupId>
+                <artifactId>rest-api-sdk</artifactId>
+                <version>${paypal.version}</version>
+            </dependency>
+            
+            <!-- JWT Authentication -->
+            <dependency>
+                <groupId>com.auth0</groupId>
+                <artifactId>java-jwt</artifactId>
+                <version>${jwt.version}</version>
+            </dependency>
+            
+            <!-- Monitoring and Observability -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>${prometheus.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>io.jaegertracing</groupId>
+                <artifactId>jaeger-client</artifactId>
+                <version>${jaeger.version}</version>
+            </dependency>
+            
+            <!-- Machine Learning -->
+            <dependency>
+                <groupId>org.tensorflow</groupId>
+                <artifactId>tensorflow-core-platform</artifactId>
+                <version>${ml.version}</version>
             </dependency>
             
             <!-- Blockchain Integration -->
@@ -86,18 +149,11 @@
                 <version>${blockchain.version}</version>
             </dependency>
             
-            <!-- Advanced Analytics -->
-            <dependency>
-                <groupId>org.apache.spark</groupId>
-                <artifactId>spark-sql_2.13</artifactId>
-                <version>3.5.0</version>
-            </dependency>
-            
             <!-- GraphQL Support -->
             <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter-graphql</artifactId>
-                <version>${spring-boot.version}</version>
+                <groupId>com.graphql-java</groupId>
+                <artifactId>graphql-java</artifactId>
+                <version>${graphql.version}</version>
             </dependency>
             
             <!-- Advanced Security -->

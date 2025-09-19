@@ -122,6 +122,21 @@ public class MenuItem {
 
     public Restaurant getRestaurant() { return restaurant; }
     public void setRestaurant(Restaurant restaurant) { this.restaurant = restaurant; }
+    
+    // Convenience methods for restaurant ID
+    public Long getRestaurantId() { 
+        return restaurant != null ? restaurant.getId() : null; 
+    }
+    
+    public void setRestaurantId(Long restaurantId) {
+        if (restaurantId != null) {
+            Restaurant r = new Restaurant();
+            r.setId(restaurantId);
+            this.restaurant = r;
+        } else {
+            this.restaurant = null;
+        }
+    }
 
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Management - Food Delivery Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .delivery-card {
+            transition: transform 0.3s;
+            border-radius: 10px;
+        }
+        .delivery-card:hover {
+            transform: translateY(-3px);
+        }
+        .status-pending { border-left: 4px solid #ffc107; }
+        .status-assigned { border-left: 4px solid #17a2b8; }
+        .status-picked-up { border-left: 4px solid #fd7e14; }
+        .status-in-transit { border-left: 4px solid #6f42c1; }
+        .status-delivered { border-left: 4px solid #28a745; }
+        .status-failed { border-left: 4px solid #dc3545; }
+        
+        .delivery-map {
+            height: 300px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/admin">
+                <i class="bi bi-arrow-left"></i> Admin Dashboard
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/admin">Dashboard</a>
+                <a class="nav-link" href="/admin/restaurants">Restaurants</a>
+                <a class="nav-link" href="/admin/orders">Orders</a>
+                <a class="nav-link active" href="/admin/deliveries">Deliveries</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h2><i class="bi bi-truck"></i> Delivery Management</h2>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-primary" onclick="assignNewDelivery()">
+                    <i class="bi bi-plus-circle"></i> Assign Delivery
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+            <div class="col-md-2">
+                <div class="card text-center border-warning">
+                    <div class="card-body">
+                        <h6 class="card-title text-warning">Pending</h6>
+                        <h4 class="mb-0" id="pending-deliveries">0</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-info">
+                    <div class="card-body">
+                        <h6 class="card-title text-info">Assigned</h6>
+                        <h4 class="mb-0" id="assigned-deliveries">0</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-purple">
+                    <div class="card-body">
+                        <h6 class="card-title text-purple">In Transit</h6>
+                        <h4 class="mb-0" id="transit-deliveries">0</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-success">
+                    <div class="card-body">
+                        <h6 class="card-title text-success">Delivered</h6>
+                        <h4 class="mb-0" id="delivered-deliveries">0</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-primary">
+                    <div class="card-body">
+                        <h6 class="card-title text-primary">Avg Time</h6>
+                        <h4 class="mb-0" id="avg-delivery-time">25m</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-center border-secondary">
+                    <div class="card-body">
+                        <h6 class="card-title text-secondary">Active Drivers</h6>
+                        <h4 class="mb-0" id="active-drivers">8</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter and Search -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search deliveries..." id="search-input">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="status-filter">
+                    <option value="">All Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="ASSIGNED">Assigned</option>
+                    <option value="PICKED_UP">Picked Up</option>
+                    <option value="IN_TRANSIT">In Transit</option>
+                    <option value="DELIVERED">Delivered</option>
+                    <option value="FAILED">Failed</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="driver-filter">
+                    <option value="">All Drivers</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="date" class="form-control" id="date-filter">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" onclick="refreshDeliveries()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Real-time Delivery Map -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-geo-alt"></i> Live Delivery Tracking</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="delivery-map">
+                            <div class="text-center">
+                                <i class="bi bi-map display-1 text-muted"></i>
+                                <p class="text-muted mt-2">Live delivery tracking map would be displayed here</p>
+                                <small class="text-muted">Integration with Google Maps/OpenStreetMap for real-time tracking</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deliveries List -->
+        <div class="row" id="deliveries-container">
+            <div class="col-12" th:if="${#lists.isEmpty(deliveries)}">
+                <div class="alert alert-info text-center">
+                    <i class="bi bi-info-circle"></i> No deliveries found.
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4 mb-3" th:each="delivery : ${deliveries}">
+                <div class="card delivery-card h-100" th:classappend="'status-' + ${delivery.status?.toString()?.toLowerCase()?.replace('_', '-')}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Delivery #<span th:text="${delivery.id}">123</span></h6>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                Actions
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" th:onclick="'viewDelivery(' + ${delivery.id} + ')'">
+                                    <i class="bi bi-eye"></i> View Details
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" th:onclick="'trackDelivery(' + ${delivery.id} + ')'">
+                                    <i class="bi bi-geo-alt"></i> Track Location
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" th:onclick="'assignDriver(' + ${delivery.id} + ')'">
+                                    <i class="bi bi-person-plus"></i> Assign Driver
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" th:onclick="'cancelDelivery(' + ${delivery.id} + ')'">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <strong>Order:</strong> #<span th:text="${delivery.orderId ?: 'N/A'}">123</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Driver:</strong> <span th:text="${delivery.driverName ?: 'Unassigned'}">Driver Name</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Customer:</strong> <span th:text="${delivery.customerName ?: 'N/A'}">Customer</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Address:</strong> 
+                            <small th:text="${delivery.deliveryAddress ?: 'N/A'}">Address</small>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Status:</strong>
+                            <span class="badge" th:classappend="'bg-' + ${delivery.status?.toString()?.toLowerCase() == 'pending' ? 'warning' : (delivery.status?.toString()?.toLowerCase() == 'delivered' ? 'success' : 'info')}"
+                                  th:text="${delivery.status ?: 'PENDING'}">Status</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>ETA:</strong> <span class="text-primary" th:text="${delivery.estimatedDeliveryTime ?: '25 mins'}">25 mins</span>
+                        </div>
+                        <div class="progress mb-2" style="height: 5px;">
+                            <div class="progress-bar" role="progressbar" 
+                                 th:style="'width: ' + ${delivery.status == 'DELIVERED' ? '100' : (delivery.status == 'IN_TRANSIT' ? '75' : (delivery.status == 'PICKED_UP' ? '50' : (delivery.status == 'ASSIGNED' ? '25' : '0')))} + '%'">
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">
+                                <i class="bi bi-clock"></i> 
+                                <span th:text="${delivery.createdAt ?: #temporals.format(#temporals.createNow(), 'HH:mm')}">12:30</span>
+                            </small>
+                            <small class="text-success fw-bold">
+                                ₹<span th:text="${delivery.deliveryFee ?: 40}">40</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign Driver Modal -->
+    <div class="modal fade" id="assignDriverModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Driver</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="assign-driver-form">
+                        <input type="hidden" id="assign-delivery-id">
+                        <div class="mb-3">
+                            <label class="form-label">Select Driver</label>
+                            <select class="form-select" id="driver-select" required>
+                                <option value="">Choose a driver...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Priority</label>
+                            <select class="form-select" id="delivery-priority">
+                                <option value="NORMAL">Normal</option>
+                                <option value="HIGH">High</option>
+                                <option value="URGENT">Urgent</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Special Instructions</label>
+                            <textarea class="form-control" id="delivery-instructions" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveDriverAssignment()">Assign Driver</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delivery Details Modal -->
+    <div class="modal fade" id="deliveryDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delivery Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="delivery-details-content">
+                    <!-- Delivery details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="printDeliveryDetails()">
+                        <i class="bi bi-printer"></i> Print
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Delivery Assignment Modal -->
+    <div class="modal fade" id="newDeliveryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign New Delivery</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="new-delivery-form">
+                        <div class="mb-3">
+                            <label class="form-label">Order ID</label>
+                            <select class="form-select" id="order-select" required>
+                                <option value="">Select an order...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Driver</label>
+                            <select class="form-select" id="new-delivery-driver">
+                                <option value="">Auto-assign</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Estimated Delivery Time (minutes)</label>
+                            <input type="number" class="form-control" id="estimated-time" value="30" min="10" max="120">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Delivery Fee (₹)</label>
+                            <input type="number" class="form-control" id="delivery-fee" value="40" min="0" step="0.01">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="createNewDelivery()">Create Delivery</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let allDeliveries = [];
+        let availableDrivers = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDeliveries();
+            loadDrivers();
+            loadPendingOrders();
+            setupEventListeners();
+        });
+
+        function loadDeliveries() {
+            // Load deliveries from API or use sample data
+            allDeliveries = [
+                {
+                    id: 1,
+                    orderId: 101,
+                    customerName: 'John Doe',
+                    driverName: 'Mike Wilson',
+                    deliveryAddress: '123 Main St, Mumbai',
+                    status: 'IN_TRANSIT',
+                    estimatedDeliveryTime: '15 mins',
+                    deliveryFee: 50,
+                    createdAt: '14:30'
+                },
+                {
+                    id: 2,
+                    orderId: 102,
+                    customerName: 'Jane Smith',
+                    driverName: 'Unassigned',
+                    deliveryAddress: '456 Park Ave, Delhi',
+                    status: 'PENDING',
+                    estimatedDeliveryTime: '25 mins',
+                    deliveryFee: 40,
+                    createdAt: '14:45'
+                }
+            ];
+            
+            updateDeliveryStats();
+        }
+
+        function loadDrivers() {
+            // Load available drivers
+            availableDrivers = [
+                { id: 1, name: 'Mike Wilson', status: 'BUSY' },
+                { id: 2, name: 'Sarah Johnson', status: 'AVAILABLE' },
+                { id: 3, name: 'David Chen', status: 'AVAILABLE' },
+                { id: 4, name: 'Lisa Brown', status: 'AVAILABLE' }
+            ];
+            
+            populateDriverSelects();
+        }
+
+        function loadPendingOrders() {
+            fetch('/admin/api/orders?status=READY')
+                .then(response => response.json())
+                .then(orders => {
+                    const select = document.getElementById('order-select');
+                    orders.forEach(order => {
+                        const option = document.createElement('option');
+                        option.value = order.id;
+                        option.textContent = `Order #${order.id} - ${order.customerName}`;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => console.log('Could not load pending orders'));
+        }
+
+        function populateDriverSelects() {
+            const selects = ['driver-select', 'new-delivery-driver'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Choose a driver...</option>';
+                
+                availableDrivers.forEach(driver => {
+                    const option = document.createElement('option');
+                    option.value = driver.id;
+                    option.textContent = `${driver.name} (${driver.status})`;
+                    if (driver.status !== 'AVAILABLE') {
+                        option.disabled = true;
+                    }
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function updateDeliveryStats() {
+            const pending = allDeliveries.filter(d => d.status === 'PENDING').length;
+            const assigned = allDeliveries.filter(d => d.status === 'ASSIGNED').length;
+            const transit = allDeliveries.filter(d => d.status === 'IN_TRANSIT' || d.status === 'PICKED_UP').length;
+            const delivered = allDeliveries.filter(d => d.status === 'DELIVERED').length;
+            const activeDrivers = availableDrivers.filter(d => d.status === 'BUSY').length;
+
+            document.getElementById('pending-deliveries').textContent = pending;
+            document.getElementById('assigned-deliveries').textContent = assigned;
+            document.getElementById('transit-deliveries').textContent = transit;
+            document.getElementById('delivered-deliveries').textContent = delivered;
+            document.getElementById('active-drivers').textContent = activeDrivers;
+        }
+
+        function setupEventListeners() {
+            document.getElementById('search-input').addEventListener('input', filterDeliveries);
+            document.getElementById('status-filter').addEventListener('change', filterDeliveries);
+            document.getElementById('driver-filter').addEventListener('change', filterDeliveries);
+            document.getElementById('date-filter').addEventListener('change', filterDeliveries);
+        }
+
+        function filterDeliveries() {
+            // Filter deliveries based on search criteria
+            console.log('Filtering deliveries...');
+        }
+
+        function viewDelivery(deliveryId) {
+            const delivery = allDeliveries.find(d => d.id === deliveryId);
+            if (!delivery) return;
+
+            const content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Delivery Information</h6>
+                        <p><strong>Delivery ID:</strong> #${delivery.id}</p>
+                        <p><strong>Order ID:</strong> #${delivery.orderId}</p>
+                        <p><strong>Status:</strong> <span class="badge bg-info">${delivery.status}</span></p>
+                        <p><strong>Driver:</strong> ${delivery.driverName}</p>
+                        <p><strong>ETA:</strong> ${delivery.estimatedDeliveryTime}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Customer & Address</h6>
+                        <p><strong>Customer:</strong> ${delivery.customerName}</p>
+                        <p><strong>Address:</strong> ${delivery.deliveryAddress}</p>
+                        <p><strong>Delivery Fee:</strong> ₹${delivery.deliveryFee}</p>
+                        <p><strong>Created:</strong> ${delivery.createdAt}</p>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-12">
+                        <h6>Delivery Timeline</h6>
+                        <div class="timeline">
+                            <div class="timeline-item">
+                                <strong>Order Placed</strong> - ${delivery.createdAt}
+                            </div>
+                            ${delivery.status !== 'PENDING' ? `<div class="timeline-item"><strong>Driver Assigned</strong> - ${delivery.createdAt}</div>` : ''}
+                            ${delivery.status === 'DELIVERED' ? `<div class="timeline-item"><strong>Delivered</strong> - Completed</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('delivery-details-content').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('deliveryDetailsModal')).show();
+        }
+
+        function trackDelivery(deliveryId) {
+            alert('Real-time tracking would open here with live GPS location');
+        }
+
+        function assignDriver(deliveryId) {
+            document.getElementById('assign-delivery-id').value = deliveryId;
+            new bootstrap.Modal(document.getElementById('assignDriverModal')).show();
+        }
+
+        function saveDriverAssignment() {
+            const deliveryId = document.getElementById('assign-delivery-id').value;
+            const driverId = document.getElementById('driver-select').value;
+            const priority = document.getElementById('delivery-priority').value;
+            const instructions = document.getElementById('delivery-instructions').value;
+
+            if (!driverId) {
+                alert('Please select a driver');
+                return;
+            }
+
+            fetch(`/admin/api/deliveries/${deliveryId}/assign`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    driverId: driverId,
+                    priority: priority,
+                    instructions: instructions
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                bootstrap.Modal.getInstance(document.getElementById('assignDriverModal')).hide();
+                refreshDeliveries();
+                alert('Driver assigned successfully!');
+            })
+            .catch(error => {
+                alert('Failed to assign driver');
+            });
+        }
+
+        function assignNewDelivery() {
+            new bootstrap.Modal(document.getElementById('newDeliveryModal')).show();
+        }
+
+        function createNewDelivery() {
+            const orderId = document.getElementById('order-select').value;
+            const driverId = document.getElementById('new-delivery-driver').value;
+            const estimatedTime = document.getElementById('estimated-time').value;
+            const deliveryFee = document.getElementById('delivery-fee').value;
+
+            if (!orderId) {
+                alert('Please select an order');
+                return;
+            }
+
+            fetch('/admin/api/deliveries', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    orderId: orderId,
+                    driverId: driverId || null,
+                    estimatedDeliveryTime: estimatedTime,
+                    deliveryFee: deliveryFee
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                bootstrap.Modal.getInstance(document.getElementById('newDeliveryModal')).hide();
+                refreshDeliveries();
+                alert('Delivery created successfully!');
+            })
+            .catch(error => {
+                alert('Failed to create delivery');
+            });
+        }
+
+        function cancelDelivery(deliveryId) {
+            if (confirm('Are you sure you want to cancel this delivery?')) {
+                fetch(`/admin/api/deliveries/${deliveryId}/cancel`, {
+                    method: 'PUT'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    refreshDeliveries();
+                    alert('Delivery cancelled successfully!');
+                })
+                .catch(error => {
+                    alert('Failed to cancel delivery');
+                });
+            }
+        }
+
+        function refreshDeliveries() {
+            location.reload();
+        }
+
+        function printDeliveryDetails() {
+            window.print();
+        }
+    </script>
+</body>
+</html>
