@@ -23,13 +23,13 @@ public class MenuItemService {
     }
 
     public List<MenuItemDto> getMenuItemsByRestaurant(Long restaurantId) {
-        return menuItemRepository.findByRestaurantId(restaurantId).stream()
+        return menuItemRepository.findByRestaurant_Id(restaurantId).stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
 
     public List<MenuItemDto> getAvailableMenuItemsByRestaurant(Long restaurantId) {
-        return menuItemRepository.findByRestaurantIdAndIsAvailable(restaurantId, true).stream()
+        return menuItemRepository.findByRestaurant_IdAndIsAvailable(restaurantId, true).stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
