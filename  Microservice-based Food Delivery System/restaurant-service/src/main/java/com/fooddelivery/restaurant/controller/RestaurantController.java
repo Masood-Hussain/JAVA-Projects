@@ -99,16 +99,19 @@ public class RestaurantController {
         }
     }
     
-    @PutMapping("/menu/{menuItemId}")
-    public ResponseEntity<MenuItemDto> updateMenuItem(@PathVariable Long menuItemId, 
+    @PutMapping("/{restaurantId}/menu/{menuItemId}")
+    public ResponseEntity<MenuItemDto> updateMenuItem(@PathVariable Long restaurantId,
+                                                     @PathVariable Long menuItemId, 
                                                      @Valid @RequestBody MenuItemDto menuItemDto) {
+        menuItemDto.setRestaurantId(restaurantId);
         Optional<MenuItemDto> updated = menuItemService.updateMenuItem(menuItemId, menuItemDto);
         return updated.map(ResponseEntity::ok)
                      .orElse(ResponseEntity.notFound().build());
     }
     
-    @DeleteMapping("/menu/{menuItemId}")
-    public ResponseEntity<Void> deleteMenuItem(@PathVariable Long menuItemId) {
+    @DeleteMapping("/{restaurantId}/menu/{menuItemId}")
+    public ResponseEntity<Void> deleteMenuItem(@PathVariable Long restaurantId,
+                                              @PathVariable Long menuItemId) {
         boolean deleted = menuItemService.deleteMenuItem(menuItemId);
         return deleted ? ResponseEntity.noContent().build() 
                       : ResponseEntity.notFound().build();
