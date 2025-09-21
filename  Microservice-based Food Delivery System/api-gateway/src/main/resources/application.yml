@@ -1,69 +1,135 @@
-spring:
+spring:spring:spring:
+
   application:
-    name: api-gateway
+
+    name: api-gateway  application:  application:
+
   cloud:
-    gateway:
+
+    gateway:    name: api-gateway    name: api-gateway
+
       routes:
-        # Restaurant Service Routes
-        - id: restaurant-service
+
+        - id: restaurant-service  cloud:  cloud:
+
           uri: lb://restaurant-service
-          predicates:
-            - Path=/api/v*/restaurants/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: restaurant-circuit-breaker
-                fallbackUri: forward:/fallback/restaurant
-            - name: RequestRateLimiter
-              args:
-                rate-limiter: "#{@redisRateLimiter}"
-                key-resolver: "#{@userKeyResolver}"
-            - name: Retry
-              args:
-                retries: 3
-                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
-                methods: GET,POST
-                backoff:
-                  firstBackoff: 50ms
-                  maxBackoff: 500ms
-                  factor: 2
-                  basedOnPreviousValue: false
 
-        # Order Service Routes
-        - id: order-service
+          predicates:    gateway:    gateway:
+
+            - Path=/api/restaurants/**
+
+        - id: order-service      routes:      routes:
+
           uri: lb://order-service
-          predicates:
-            - Path=/api/v*/orders/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: order-circuit-breaker
-                fallbackUri: forward:/fallback/order
-            - name: RequestRateLimiter
-              args:
-                rate-limiter: "#{@redisRateLimiter}"
-                key-resolver: "#{@userKeyResolver}"
 
-        # Payment Service Routes
-        - id: payment-service
+          predicates:        # Restaurant Service Routes        # Restaurant Service Routes
+
+            - Path=/api/orders/**
+
+        - id: payment-service        - id: restaurant-service        - id: restaurant-service
+
           uri: lb://payment-service
-          predicates:
-            - Path=/api/v*/payments/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: payment-circuit-breaker
-                fallbackUri: forward:/fallback/payment
-            - name: RequestRateLimiter
-              args:
-                rate-limiter: "#{@redisRateLimiter}"
-                key-resolver: "#{@userKeyResolver}"
-                redis-rate-limiter.replenish-rate: 50
-                redis-rate-limiter.burst-capacity: 100
 
-        # Delivery Service Routes
-        - id: delivery-service
+          predicates:          uri: lb://restaurant-service          uri: lb://restaurant-service
+
+            - Path=/api/payments/**
+
+        - id: delivery-service          predicates:          predicates:
+
           uri: lb://delivery-service
+
+          predicates:            - Path=/api/restaurants/**            - Path=/api/restaurants/**
+
+            - Path=/api/deliveries/**
+
+
+
+server:
+
+  port: 8080        # Order Service Routes        # Order Service Routes
+
+
+
+eureka:        - id: order-service        - id: order-service
+
+  client:
+
+    service-url:          uri: lb://order-service          uri: lb://order-service
+
+      defaultZone: http://localhost:8761/eureka/
+
+          predicates:          predicates:
+
+management:
+
+  endpoints:            - Path=/api/orders/**            - Path=/api/orders/**
+
+    web:
+
+      exposure:
+
+        include: health,info
+
+        # Payment Service Routes        # Payment Service Routes
+
+logging:
+
+  level:        - id: payment-service        - id: payment-service
+
+    org.springframework.cloud.gateway: INFO
+          uri: lb://payment-service          uri: lb://payment-service
+
+          predicates:          predicates:
+
+            - Path=/api/payments/**            - Path=/api/payments/**
+
+
+
+        # Delivery Service Routes        # Delivery Service Routes
+
+        - id: delivery-service        - id: delivery-service
+
+          uri: lb://delivery-service          uri: lb://delivery-service
+
+          predicates:          predicates:
+
+            - Path=/api/deliveries/**            - Path=/api/deliveries/**
+
+
+
+server:server:
+
+  port: 8080  port: 8080
+
+
+
+eureka:eureka:
+
+  client:  client:
+
+    service-url:    service-url:
+
+      defaultZone: http://localhost:8761/eureka/      defaultZone: http://localhost:8761/eureka/
+
+
+
+management:management:
+
+  endpoints:  endpoints:
+
+    web:    web:
+
+      exposure:      exposure:
+
+        include: health,info        include: health,info
+
+
+
+logging:logging:
+
+  level:  level:
+
+    org.springframework.cloud.gateway: INFO    org.springframework.cloud.gateway: INFO
           predicates:
             - Path=/api/v*/delivery/**
           filters:
