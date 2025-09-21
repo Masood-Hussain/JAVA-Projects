@@ -16,7 +16,7 @@ public class WebController {
     @Autowired
     private FrontendService frontendService;
 
-    @GetMapping("/")
+    @GetMapping("/classic")
     public String home(Model model) {
         try {
             List<RestaurantDto> restaurants = frontendService.getAllRestaurants();
@@ -27,7 +27,7 @@ public class WebController {
         return "index";
     }
 
-    @GetMapping("/restaurants")
+    @GetMapping("/classic/restaurants")
     public String restaurants(Model model) {
         try {
             List<RestaurantDto> restaurants = frontendService.getAllRestaurants();
@@ -38,7 +38,7 @@ public class WebController {
         return "restaurants";
     }
 
-    @GetMapping("/restaurant/{id}")
+    @GetMapping("/classic/restaurant/{id}")
     public String restaurantDetails(@PathVariable Long id, Model model) {
         try {
             RestaurantDto restaurant = frontendService.getRestaurantById(id);
@@ -69,7 +69,7 @@ public class WebController {
         }
     }
 
-    @GetMapping("/orders")
+    @GetMapping("/classic/orders")
     public String orders(Model model) {
         try {
             List<OrderDto> orders = frontendService.getAllOrders();
@@ -104,7 +104,7 @@ public class WebController {
         return "order-details";
     }
 
-    @GetMapping("/admin")
+    @GetMapping("/classic/admin")
     public String admin(Model model) {
         return "admin";
     }
