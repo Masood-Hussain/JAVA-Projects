@@ -96,6 +96,101 @@
                                               placeholder="Describe your delicious menu item..."></textarea>
                                 </div>
                                 <div class="col-12">
+                                <!-- Advanced Features Row -->
+                                <div class="col-md-6">
+                                    <label for="imageUrl" class="form-label">Image URL</label>
+                                    <input type="url" class="form-control" id="imageUrl" name="imageUrl" 
+                                           placeholder="https://example.com/image.jpg">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="preparationTime" class="form-label">Prep Time (minutes)</label>
+                                    <input type="number" class="form-control" id="preparationTime" name="preparationTime" 
+                                           min="1" placeholder="e.g., 15">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="spiceLevel" class="form-label">Spice Level</label>
+                                    <select class="form-control" id="spiceLevel" name="spiceLevel">
+                                        <option value="">Select Spice Level</option>
+                                        <option value="MILD">Mild</option>
+                                        <option value="MEDIUM">Medium</option>
+                                        <option value="HOT">Hot</option>
+                                        <option value="EXTRA_HOT">Extra Hot</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="calories" class="form-label">Calories</label>
+                                    <input type="number" class="form-control" id="calories" name="calories" 
+                                           min="0" placeholder="e.g., 350">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Dietary Information</label>
+                                    <div class="row">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="vegetarian" name="vegetarian">
+                                                <label class="form-check-label" for="vegetarian">
+                                                    <i class="bi bi-leaf text-success"></i> Vegetarian
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="vegan" name="vegan">
+                                                <label class="form-check-label" for="vegan">
+                                                    <i class="bi bi-flower1 text-success"></i> Vegan
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="glutenFree" name="glutenFree">
+                                                <label class="form-check-label" for="glutenFree">
+                                                    <i class="bi bi-shield-check text-info"></i> Gluten Free
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="halal" name="halal">
+                                                <label class="form-check-label" for="halal">
+                                                    <i class="bi bi-star text-warning"></i> Halal
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="keto" name="keto">
+                                                <label class="form-check-label" for="keto">
+                                                    <i class="bi bi-lightning text-danger"></i> Keto
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="featured" name="featured">
+                                                <label class="form-check-label" for="featured">
+                                                    <i class="bi bi-star-fill text-warning"></i> Featured
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="ingredients" class="form-label">Ingredients (comma-separated)</label>
+                                    <input type="text" class="form-control" id="ingredients" name="ingredients" 
+                                           placeholder="e.g., tomatoes, cheese, basil, olive oil">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="allergens" class="form-label">Allergens (comma-separated)</label>
+                                    <input type="text" class="form-control" id="allergens" name="allergens" 
+                                           placeholder="e.g., dairy, gluten, nuts">
+                                </div>
+                                <div class="col-12">
+                                    <label for="promotionalOffer" class="form-label">Promotional Offer</label>
+                                    <input type="text" class="form-control" id="promotionalOffer" name="promotionalOffer" 
+                                           placeholder="e.g., Buy 1 Get 1 Free, 20% Off">
+                                </div>
+                                <div class="col-12">
                                     <button type="submit" class="btn btn-success">
                                         <i class="bi bi-plus-circle"></i> Add Menu Item
                                     </button>
@@ -157,15 +252,76 @@
                                             </ul>
                                         </div>
                                     </div>
+                                    <!-- Image if available -->
+                                    <div th:if="${item.imageUrl}" class="position-relative">
+                                        <img th:src="${item.imageUrl}" class="card-img-top" style="height: 150px; object-fit: cover;" alt="Menu item image">
+                                        <div th:if="${item.featured}" class="position-absolute top-0 end-0 m-2">
+                                            <span class="badge bg-warning"><i class="bi bi-star-fill"></i> Featured</span>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="card-body">
-                                        <h6 class="card-title" th:text="${item.name}">Item Name</h6>
+                                        <h6 class="card-title d-flex justify-content-between align-items-start">
+                                            <span th:text="${item.name}">Item Name</span>
+                                            <div th:if="${item.spiceLevel}" class="ms-2">
+                                                <span class="badge" 
+                                                      th:classappend="${item.spiceLevel == 'MILD'} ? 'bg-success' : 
+                                                                     ${item.spiceLevel == 'MEDIUM'} ? 'bg-warning' : 
+                                                                     ${item.spiceLevel == 'HOT'} ? 'bg-danger' : 'bg-dark'"
+                                                      th:text="${item.spiceLevel}">Spice</span>
+                                            </div>
+                                        </h6>
+                                        
                                         <p class="card-text text-muted small" th:text="${item.description}" 
                                            th:if="${item.description}">Description</p>
-                                        <div class="d-flex justify-content-between align-items-center">
+                                        
+                                        <!-- Dietary badges -->
+                                        <div class="mb-2" th:if="${item.vegetarian or item.vegan or item.glutenFree or item.halal or item.keto}">
+                                            <span th:if="${item.vegetarian}" class="badge bg-success me-1"><i class="bi bi-leaf"></i> Veg</span>
+                                            <span th:if="${item.vegan}" class="badge bg-success me-1"><i class="bi bi-flower1"></i> Vegan</span>
+                                            <span th:if="${item.glutenFree}" class="badge bg-info me-1"><i class="bi bi-shield-check"></i> GF</span>
+                                            <span th:if="${item.halal}" class="badge bg-warning me-1"><i class="bi bi-star"></i> Halal</span>
+                                            <span th:if="${item.keto}" class="badge bg-danger me-1"><i class="bi bi-lightning"></i> Keto</span>
+                                        </div>
+                                        
+                                        <!-- Price and info row -->
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
                                             <strong class="text-success">₹<span th:text="${item.price}">0.00</span></strong>
-                              <span class="badge" 
-                                  th:classappend="${item.isAvailable} ? 'bg-success' : 'bg-warning'"
-                                  th:text="${item.isAvailable} ? 'Available' : 'Unavailable'">Status</span>
+                                            <div class="d-flex gap-2">
+                                                <span th:if="${item.preparationTime}" class="badge bg-secondary">
+                                                    <i class="bi bi-clock"></i> <span th:text="${item.preparationTime}">0</span>min
+                                                </span>
+                                                <span th:if="${item.calories}" class="badge bg-secondary">
+                                                    <i class="bi bi-fire"></i> <span th:text="${item.calories}">0</span>cal
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Availability and promotional offer -->
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="badge" 
+                                                  th:classappend="${item.isAvailable} ? 'bg-success' : 'bg-warning'"
+                                                  th:text="${item.isAvailable} ? 'Available' : 'Unavailable'">Status</span>
+                                            <div th:if="${item.promotionalOffer}" class="text-end">
+                                                <small class="text-danger fw-bold" th:text="${item.promotionalOffer}">Offer</small>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Ingredients (truncated) -->
+                                        <div th:if="${item.ingredients and !#lists.isEmpty(item.ingredients)}" class="mt-2">
+                                            <small class="text-muted">
+                                                <strong>Ingredients:</strong> 
+                                                <span th:text="${#strings.listJoin(#lists.slice(item.ingredients, 0, 3), ', ')}">ingredients</span>
+                                                <span th:if="${#lists.size(item.ingredients) > 3}">...</span>
+                                            </small>
+                                        </div>
+                                        
+                                        <!-- Allergens -->
+                                        <div th:if="${item.allergens and !#lists.isEmpty(item.allergens)}" class="mt-1">
+                                            <small class="text-warning">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong>Allergens:</strong> 
+                                                <span th:text="${#strings.listJoin(item.allergens, ', ')}">allergens</span>
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
