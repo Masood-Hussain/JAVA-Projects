@@ -116,4 +116,37 @@ public class RestaurantController {
         return deleted ? ResponseEntity.noContent().build() 
                       : ResponseEntity.notFound().build();
     }
+    
+    // Additional endpoints for better menu management
+    @GetMapping("/{restaurantId}/menu/category/{category}")
+    public ResponseEntity<List<MenuItemDto>> getMenuItemsByCategory(@PathVariable Long restaurantId,
+                                                                   @PathVariable String category) {
+        List<MenuItemDto> menuItems = menuItemService.getMenuItemsByRestaurantAndCategory(restaurantId, category);
+        return ResponseEntity.ok(menuItems);
+    }
+    
+    @GetMapping("/{restaurantId}/menu/search")
+    public ResponseEntity<List<MenuItemDto>> searchMenuItems(@PathVariable Long restaurantId,
+                                                           @RequestParam String name) {
+        List<MenuItemDto> menuItems = menuItemService.searchMenuItemsByName(restaurantId, name);
+        return ResponseEntity.ok(menuItems);
+    }
+    
+    @PatchMapping("/{restaurantId}/menu/{menuItemId}/availability")
+    public ResponseEntity<MenuItemDto> toggleMenuItemAvailability(@PathVariable Long restaurantId,
+                                                                 @PathVariable Long menuItemId) {
+        try {
+            MenuItemDto updated = menuItemService.toggleAvailability(menuItemId);
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
+    @GetMapping("/menu/item/{menuItemId}")
+    public ResponseEntity<MenuItemDto> getMenuItemById(@PathVariable Long menuItemId) {
+        Optional<MenuItemDto> menuItem = menuItemService.getMenuItemById(menuItemId);
+        return menuItem.map(ResponseEntity::ok)
+                      .orElse(ResponseEntity.notFound().build());
+    }
 }
