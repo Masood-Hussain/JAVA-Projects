@@ -1,0 +1,12 @@
+com/speechrecognition/SpeechRecognitionSwingApp.class
+com/speechrecognition/SpeechToTextService$AdaptiveAIResult.class
+com/speechrecognition/SpeechToTextService$WordSignature.class
+com/speechrecognition/SpeechToTextService$AdvancedWordSignature.class
+com/speechrecognition/TextToSpeechService.class
+com/speechrecognition/SpeechRecognitionSwingApp$1.class
+com/speechrecognition/SpeechRecognitionCLI.class
+com/speechrecognition/SpeechToTextService$FusionResult.class
+com/speechrecognition/SpeechToTextService$QuantumAudioAnalysis.class
+com/speechrecognition/SpeechToTextService$AIRecognitionResult.class
+com/speechrecognition/SpeechToTextService.class
+com/speechrecognition/SpeechToTextService$TransformerNeuralAnalysis.class
